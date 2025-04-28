@@ -120,7 +120,6 @@
                 players.forEach((rec) => {
                     const p = rec.player;
 
-                    const where = p.getCurrentTime?.() ?? 0;
                     p.dispose();
 
                     const neo = AsciinemaPlayer.create(rec.url, rec.container, {
@@ -131,7 +130,6 @@
                         controls: true,
                     });
 
-                    neo.seek(where).then(() => neo.pause());
                     rec.player = neo;
                 });
             }
@@ -142,9 +140,6 @@
             });
             idleSlider.addEventListener("input", () => {
                 idleVal.value = idleSlider.value == 62 ? "inf" : idleSlider.value;
-                applyChanges();
-            });
-            window.addEventListener("pageshow", () => {
                 applyChanges();
             });
 
