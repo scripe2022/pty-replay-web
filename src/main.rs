@@ -48,7 +48,7 @@ async fn main() -> anyhow::Result<()> {
             ServeDir::new(concat!(env!("CARGO_MANIFEST_DIR"), "/static")),
         )
         .route("/replay/view/{id}", get(view))
-        .route("/replay", get(index))
+        .route("/replay/", get(index))
         .route("/replay/list", get(list))
         .route("/replay/upload", post(upload))
         .with_state(state);
