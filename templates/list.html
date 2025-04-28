@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Replay List</title>
+        <link rel="stylesheet" href="/replay/static/css/pico.min.css" />
+    </head>
+
+    <body style="margin-top: 1rem">
+        <main class="pico container">
+            <h1>Replay List</h1>
+
+            {% for log in logs %}
+            <article>
+                <h4>
+                    <a href="/replay/view/{{log.uuid}}" target="_blank">{{log.uuid}}</a>
+                </h4>
+                <p>Uploaded At <span style="color: #666">{{log.uploaded_at | human}}</span></p>
+                <pre><code>{{log.note}}</code></pre>
+            </article>
+            {% endfor %}
+        </main>
+    </body>
+</html>

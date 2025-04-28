@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>player</title>
+        <link rel="stylesheet" href="/replay/static/css/pico.min.css" />
+    </head>
+    <body style="margin-top: 1rem">
+        <main class="pico container">
+            <h3>step 1: run sh command in workspace</h3>
+            <pre><code id="copy-cmd" style="overflow-wrap: break-word; white-space: pre-wrap">printf &quot;\033]52;c;%s\a&quot; &quot;$(cd /home/student/.local/state/workspace-logs/ || exit; HB=&quot;&quot;; [ -f heartbeat.log ] &amp;&amp; HB=$(base64 -w 0 &lt; heartbeat.log); CASTS=&quot;$(echo -n &quot;[&quot;; for f in *.cast; do [ -f &quot;$f&quot; ] || continue; c=$(base64 -w 0 &quot;$f&quot;); fn=$(printf '%s' &quot;$f&quot; | sed 's/&quot;/\\&quot;/g'); echo -n &quot;{\&quot;filename\&quot;:\&quot;$fn\&quot;,\&quot;content\&quot;:\&quot;$c\&quot;},&quot;; done | sed 's/,$//'; echo -n &quot;]&quot;)&quot;; JSON=$(printf '{&quot;heartbeat&quot;:&quot;%s&quot;,&quot;casts&quot;:%s}' &quot;$HB&quot; &quot;$CASTS&quot;); base64 -w 0 &lt;&lt;&lt;&quot;$JSON&quot;)&quot;</code></pre>
+
+            <h3>step 2: upload</h3>
+            <div>
+                <label class="label-block" for="notes">optional notes:</label>
+                <textarea id="notes" type="text" placeholder="notes..."></textarea>
+            </div>
+
+            <div>
+                <label class="label-block" for="json-data">paste here:</label>
+                <textarea
+                    id="json-data"
+                    placeholder='[{"filename":"time.cast","content":"base64..."}]'
+                ></textarea>
+            </div>
+
+            <h3>step 3: upload</h3>
+            <button id="submit-button">upload</button>
+            <div id="result-link" style="margin-top: 20px"></div>
+        </main>
+
+        <script>
+            document.getElementById("submit-button").addEventListener("click", () => {
+                const notes = document.getElementById("notes").value;
+                const jsonData = document.getElementById("json-data").value;
+                let obj;
+                try {
+                    obj = JSON.parse(jsonData);
+                } catch (e) {
+                    console.error("invalid json: ", e.message);
+                }
+                obj["notes"] = notes;
+                console.log(obj);
+
+                fetch("/replay/upload", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(obj),
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        document.getElementById("submit-button").style.display = "none";
+
+                        const linkContainer = document.getElementById("result-link");
+                        linkContainer.innerHTML = "";
+                        const aTag = document.createElement("a");
+
+                        const full = new URL(data.url, window.location.origin).href;
+
+                        aTag.href = full;
+                        aTag.textContent = `${full}`;
+                        linkContainer.appendChild(aTag);
+                    })
+                    .catch((err) => {
+                        console.error("error: ", err);
+                    });
+            });
+        </script>
+    </body>
+</html>

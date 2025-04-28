@@ -1,0 +1,154 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Replay: {{note}}</title>
+        <link rel="stylesheet" href="/replay/static/css/asciinema-player.css" />
+        <link rel="stylesheet" href="/replay/static/css/pico.min.css" />
+        <style>
+            table.heartbeats {
+                border-collapse: collapse;
+            }
+            table.heartbeats tbody.session + tbody.session {
+                border-top: 2px solid #d0d0d0;
+            }
+            table.heartbeats tbody.session:first-child {
+                border-top: none;
+            }
+        </style>
+        <script src="/replay/static/js/asciinema-player.min.js"></script>
+    </head>
+    <body style="margin: 2rem 0rem">
+        <main class="container">
+            <div class="pico">
+                <label>
+                    Speed:
+                    <output id="speedVal">1.0</output>
+                    <input
+                        id="speed"
+                        type="range"
+                        min="0.5"
+                        max="10"
+                        step="0.1"
+                        value="1.0"
+                        autocomplete="off"
+                    />
+                </label>
+                <label id="idleLabel">
+                    Idle Time:
+                    <output id="idleVal">inf</output>
+                    <input
+                        id="idle"
+                        type="range"
+                        min="2"
+                        max="62"
+                        step="2"
+                        value="62"
+                        list="idleTicks"
+                        autocomplete="off"
+                    />
+                </label>
+            </div>
+            <h2 class="pico">Uploaded At</h2>
+            <span class="pico" style="color: #666">{{uploaded_at | human}}</span>
+            <h2 class="pico">Notes</h2>
+            <div class="pico">
+                <pre><code>{{note}}</code></pre>
+            </div>
+
+            <h2 class="pico">Heartbeats</h2>
+            <table class="heartbeats pico">
+                <thead>
+                    <tr>
+                        <th scope="col">Session</th>
+                        <th scope="col">Started At</th>
+                        <th scope="col">Ended At</th>
+                        <th scope="col">Duration</th>
+                    </tr>
+                </thead>
+                {% for (session, itvs) in heartbeats %}
+                <tbody class="session">
+                    {% for itv in itvs %}
+                    <tr>
+                        <td>{{ session }}</td>
+                        <td>{{ itv.0 | human }}</td>
+                        <td>{{ itv.1 | human }}</td>
+                        <td>{{ itv.1 - itv.0 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% endfor %}
+            </table>
+
+            {% for cast in casts %}
+            <h2 class="pico">Cast {{loop.index}}</h2>
+            <p style="color: #666">{{cast.started_at | human}}, {{cast.size_byte}} Bytes</p>
+            <div class="asc-container" data-cast-url="{{endpoint}}/{{cast.path}}">loading...</div>
+            {% endfor %}
+        </main>
+        <script>
+            const speedSlider = document.getElementById("speed");
+            const idleSlider = document.getElementById("idle");
+
+            const players = [];
+
+            function currentIdleLimit() {
+                const v = Number(idleSlider.value);
+                return v === 62 ? null : v;
+            }
+
+            function initPlayers() {
+                document.querySelectorAll(".asc-container").forEach((container) => {
+                    const url = container.dataset.castUrl;
+                    container.innerHTML = "";
+                    const player = AsciinemaPlayer.create(url, container, {
+                        speed: Number(speedSlider.value),
+                        idleTimeLimit: currentIdleLimit(),
+                        preload: true,
+                        fit: false,
+                        controls: true,
+                    });
+                    players.push({ player, url, container });
+                });
+            }
+
+            function applyChanges() {
+                const s = Number(speedSlider.value);
+                const i = currentIdleLimit();
+
+                players.forEach((rec) => {
+                    const p = rec.player;
+
+                    const where = p.getCurrentTime?.() ?? 0;
+                    p.dispose();
+
+                    const neo = AsciinemaPlayer.create(rec.url, rec.container, {
+                        speed: s,
+                        idleTimeLimit: i,
+                        preload: true,
+                        fit: false,
+                        controls: true,
+                    });
+
+                    neo.seek(where).then(() => neo.pause());
+                    rec.player = neo;
+                });
+            }
+
+            speedSlider.addEventListener("input", () => {
+                speedVal.value = speedSlider.value;
+                applyChanges();
+            });
+            idleSlider.addEventListener("input", () => {
+                idleVal.value = idleSlider.value == 62 ? "inf" : idleSlider.value;
+                applyChanges();
+            });
+            window.addEventListener("pageshow", () => {
+                applyChanges();
+            });
+
+            initPlayers();
+        </script>
+    </body>
+</html>
