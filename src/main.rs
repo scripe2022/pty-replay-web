@@ -26,6 +26,9 @@ use view::view;
 mod mark;
 use mark::{add_mark, del_mark};
 
+mod note;
+use note::note_update;
+
 #[derive(Clone)]
 struct AppState {
     db: MariaDB,
@@ -53,6 +56,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/replay/view/{id}", get(view))
         .route("/replay/mark", delete(del_mark))
         .route("/replay/mark", post(add_mark))
+        .route("/replay/note/update", post(note_update))
         .route("/replay/", get(index))
         .route("/replay/list", get(list))
         .route("/replay/upload", post(upload))

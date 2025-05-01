@@ -29,6 +29,7 @@ pub struct ViewTemplate {
     note: String,
     heartbeats: BTreeMap<usize, Vec<(OffsetDateTime, OffsetDateTime)>>,
     casts: Vec<Cast>,
+    uuid: Uuid
 }
 
 pub async fn view(State(app): State<AppState>, Path(id): Path<Uuid>) -> Result<ViewTemplate, AppError> {
@@ -93,5 +94,6 @@ pub async fn view(State(app): State<AppState>, Path(id): Path<Uuid>) -> Result<V
         uploaded_at: log.uploaded_at,
         heartbeats,
         casts,
+        uuid: id,
     })
 }
