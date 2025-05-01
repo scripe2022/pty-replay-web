@@ -1,12 +1,12 @@
 [package]
-name = "cse30-replay"
+name = "pty-replay-web"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.8" }
-askama = "0.14"
+askama = {version="0.14", features=["serde_json"] }
 askama_web = { version = "0.14", features = ["axum-0.8"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }

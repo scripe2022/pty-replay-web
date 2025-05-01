@@ -919,31 +919,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cse30-replay"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "askama",
- "askama_web",
- "aws-config",
- "aws-sdk-s3",
- "aws-smithy-runtime-api",
- "axum",
- "base64 0.22.1",
- "bytes",
- "dotenvy",
- "futures",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror",
- "time",
- "tokio",
- "tower-http",
- "uuid",
-]
-
-[[package]]
 name = "der"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2131,6 +2106,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02b3e5e68a3a1a02aad3ec490a98007cbc13c37cbe84a3cd7b8e406d76e7f778"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "pty-replay-web"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "askama",
+ "askama_web",
+ "aws-config",
+ "aws-sdk-s3",
+ "aws-smithy-runtime-api",
+ "axum",
+ "base64 0.22.1",
+ "bytes",
+ "dotenvy",
+ "futures",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "time",
+ "tokio",
+ "tower-http",
+ "uuid",
 ]
 
 [[package]]

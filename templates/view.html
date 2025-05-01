@@ -16,6 +16,21 @@
             table.heartbeats tbody.session:first-child {
                 border-top: none;
             }
+            .marks td:last-child,
+            .marks th:last-child {
+                width: 1%;
+                white-space: nowrap;
+                padding-left: 0.25rem;
+                padding-right: 0.25rem;
+                text-align: center;
+            }
+            .del-btn,
+            .add-btn {
+                margin-bottom: 0px !important;
+            }
+            .marks td:first-child span {
+                font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            }
         </style>
         <script src="/replay/static/js/asciinema-player.min.js"></script>
     </head>
@@ -84,66 +99,172 @@
             {% for cast in casts %}
             <h2 class="pico">Cast {{loop.index}}</h2>
             <p style="color: #666">{{cast.started_at | human}}, {{cast.size_byte}} Bytes</p>
-            <div class="asc-container" data-cast-url="{{endpoint}}/{{cast.path}}">loading...</div>
+            <div class="asc-player">
+                <div id="player-{{cast.id}}">Loading...</div>
+                <div class="pico marks-box" id="markers-{{cast.id}}"></div>
+            </div>
             {% endfor %}
         </main>
-        <script>
+
+        <script type="module">
+            import { PtyPlayer } from "/replay/static/js/app.js";
+
             const speedSlider = document.getElementById("speed");
             const idleSlider = document.getElementById("idle");
-
-            const players = [];
 
             function currentIdleLimit() {
                 const v = Number(idleSlider.value);
                 return v === 62 ? null : v;
             }
 
+            const players = new Map();
+
+            const endpoint = {{endpoint | json | safe}};
+            const casts = {{casts | json | safe}};
+
+            function secondToTime(seconds) {
+                return new Date(seconds * 1000).toISOString().substr(11, 8);
+            }
+
+            function renderRow(m) {
+                return `
+                <tr data-mark-id="${m.id}" data-second="${m.second}">
+                    <td><span>${secondToTime(m.second)}</span></td>
+                    <td><span>${m.note}</span></td>
+                    <td><button type="button" class="del-btn contrast outline">✖</button></td>
+                </tr>`;
+            }
+
+            function renderMarkersTable(container, cast) {
+                const rows = cast.marks
+                    .map(m => renderRow(m))
+                    .join('');
+
+                container.innerHTML = `<table class="marks" data-cast-id=${cast.id}>
+                <thead>
+                    <tr><th>time</th><th>marker</th><th></th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span>${secondToTime(0)}</span></td>
+                        <td><input style="margin-bottom: 0;" name="note" placeholder="note..."></td>
+                        <td><button type="button" class="add-btn outline">➕</button></td>
+                    </tr>
+                    ${rows}
+                </tbody>
+                </table>`;
+            }
+
             function initPlayers() {
-                document.querySelectorAll(".asc-container").forEach((container) => {
-                    const url = container.dataset.castUrl;
+                casts.forEach((cast) => {
+                    const container = document.getElementById(`player-${cast.id}`);
                     container.innerHTML = "";
-                    const player = AsciinemaPlayer.create(url, container, {
-                        speed: Number(speedSlider.value),
-                        idleTimeLimit: currentIdleLimit(),
-                        preload: true,
-                        fit: false,
-                        controls: true,
-                    });
-                    players.push({ player, url, container });
+                    const player = new PtyPlayer(
+                        `${endpoint}/${cast.path}`,
+                        document.getElementById(`player-${cast.id}`),
+                        {
+                            rows: cast.height,
+                            cols: cast.width,
+                            speed: 1,
+                            idleTime: null,
+                            markers: cast.marks,
+                            controls: true,
+                        }
+                    )
+                    const box = document.getElementById(`markers-${cast.id}`);
+                    if (box) renderMarkersTable(box, cast);
+
+                    const timeSpan = box.querySelector('tbody tr:first-child span');
+                    setInterval(() => {
+                        timeSpan.textContent = secondToTime(player.getCurrentTime());
+                    }, 100);
+                    players.set(cast.id, player);
                 });
             }
 
-            function applyChanges() {
-                const s = Number(speedSlider.value);
-                const i = currentIdleLimit();
-
-                players.forEach((rec) => {
-                    const p = rec.player;
-
-                    p.dispose();
-
-                    const neo = AsciinemaPlayer.create(rec.url, rec.container, {
-                        speed: s,
-                        idleTimeLimit: i,
-                        preload: true,
-                        fit: false,
-                        controls: true,
-                    });
-
-                    rec.player = neo;
-                });
-            }
-
-            speedSlider.addEventListener("input", () => {
+            speedSlider.addEventListener('input', async() => {
                 speedVal.value = speedSlider.value;
-                applyChanges();
+                const speed = Number(speedSlider.value);
+                const tasks = [...players.values()].map(player=> player.setSpeed(speed));
+                await Promise.all(tasks);
             });
-            idleSlider.addEventListener("input", () => {
+
+            const markerBoxes = document.querySelectorAll('.marks-box');
+            idleSlider.addEventListener("input", async() => {
                 idleVal.value = idleSlider.value == 62 ? "inf" : idleSlider.value;
-                applyChanges();
+                const idle = idleSlider.value == 62 ? null : Number(idleSlider.value);
+                const tasks = [...players.values()].map(player => player.setIdleTimeLimit(idle));
+                await Promise.all(tasks);
+                markerBoxes.forEach(box => {
+                    box.style.display = idle != null ? 'none': '';
+                });
             });
 
             initPlayers();
+
+            async function requestJSON(url, method, body){
+                const r = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type':'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+                return r.json();
+            }
+
+            document.addEventListener("click", async e => {
+                if (e.target.matches('.add-btn, .del-btn')) {
+                    e.preventDefault();
+                }
+                if (e.target.matches(".add-btn")) {
+                    const tbl = e.target.closest("table");
+                    const castId = +tbl.dataset.castId;
+                    const noteInput = tbl.querySelector("input[name=note]");
+                    const note = noteInput.value.trim();
+                    if (!note) return;
+
+                    const sec = players.get(castId).getCurrentTime();
+
+                    const resp = await requestJSON(
+                        `/replay/mark`,
+                        "POST",
+                        { cast_id: castId, second: sec, note }
+                    );
+                    if (!resp.ok) {
+                        return alert("Failed to add mark");
+                    }
+                    const mark = { id: resp.mark_id, second: sec, note };
+
+                    const player = players.get(castId);
+                    player.addMarker(sec, note);
+
+                    const tbody = tbl.tBodies[0];
+                    const newRowHtml = renderRow(mark);
+                    let inserted = false;
+
+                    for (const row of tbody.querySelectorAll('tr[data-mark-id]')) {
+                        const rowSec = Number(row.dataset.second);
+                        if (rowSec > mark.second) {
+                            row.insertAdjacentHTML('beforebegin', newRowHtml);
+                            inserted = true;
+                            break;
+                        }
+                    }
+                    if (!inserted) {
+                        tbody.insertAdjacentHTML('beforeend', newRowHtml);
+                    }
+                    noteInput.value = '';
+                }
+                else if (e.target.matches(".del-btn")) {
+                    const row = e.target.closest("tr");
+                    const markId = +row.dataset.markId;
+                    const castId = +row.closest("table").dataset.castId;
+                    const ok = (await requestJSON('/replay/mark', "DELETE", { mark_id: markId })).ok;
+                    if (!ok) return alert("Failed to delete mark");
+                    players.get(castId).deleteMarker(markId);
+                    row.remove();
+                }
+            })
         </script>
     </body>
 </html>

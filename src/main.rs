@@ -4,7 +4,7 @@
 
 use anyhow::Context;
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::{get, post, delete};
 use dotenvy::dotenv;
 use tower_http::services::ServeDir;
 
@@ -22,6 +22,9 @@ use upload::upload;
 
 mod view;
 use view::view;
+
+mod mark;
+use mark::{add_mark, del_mark};
 
 #[derive(Clone)]
 struct AppState {
@@ -48,6 +51,8 @@ async fn main() -> anyhow::Result<()> {
             ServeDir::new(concat!(env!("CARGO_MANIFEST_DIR"), "/static")),
         )
         .route("/replay/view/{id}", get(view))
+        .route("/replay/mark", delete(del_mark))
+        .route("/replay/mark", post(add_mark))
         .route("/replay/", get(index))
         .route("/replay/list", get(list))
         .route("/replay/upload", post(upload))
