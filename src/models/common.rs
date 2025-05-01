@@ -9,7 +9,7 @@ use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use sqlx::QueryBuilder;
 use sqlx::mysql::MySqlPoolOptions;
-use sqlx::{MySql, Pool};
+use sqlx::{Row, MySql, Pool};
 use std::ops::DerefMut;
 use std::sync::Arc;
 use time::OffsetDateTime;
@@ -42,6 +42,8 @@ pub struct Cast {
     pub filename: String,
     pub content: String,
     pub datetime: OffsetDateTime,
+    pub height: u16,
+    pub width: u16,
 }
 
 #[derive(Clone)]
@@ -66,10 +68,20 @@ pub struct HeartbeatMeta {
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct CastMeta {
+    pub id: u32,
     pub bucket: String,
     pub path: String,
     pub size_byte: u32,
     pub started_at: OffsetDateTime,
+    pub height: u16,
+    pub width: u16,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct MarkMeta {
+    pub id: u32,
+    pub second: f64,
+    pub note: String,
 }
 
 impl MariaDB {
@@ -111,13 +123,15 @@ impl MariaDB {
         let bucket = std::env::var("S3_BUCKET").unwrap();
         let key = format!("{}/{}", std::env::var("S3_KEY_PREFIX").unwrap_or_default(), &uuid_str);
         let mut qb: QueryBuilder<MySql> =
-            QueryBuilder::new(r#"INSERT INTO casts (uuid, bucket, path, size_byte, started_at)"#);
+            QueryBuilder::new(r#"INSERT INTO casts (uuid, bucket, path, size_byte, started_at, height, width)"#);
         qb.push_values(casts.iter(), |mut b, cast| {
             b.push_bind(&uuid_str);
             b.push_bind(&bucket);
             b.push_bind(format!("{}/{}", key, cast.filename));
             b.push_bind(cast.content.len() as u32);
             b.push_bind(cast.datetime);
+            b.push_bind(cast.height);
+            b.push_bind(cast.width);
         });
         qb.build().execute(tx.deref_mut()).await?;
 
@@ -187,10 +201,13 @@ impl MariaDB {
             CastMeta,
             r#"
             SELECT
+                id         AS `id!: u32`,
                 bucket     AS `bucket!: String`,
                 path       AS `path!: String`,
                 size_byte  AS `size_byte!: u32`,
-                started_at AS `started_at!: OffsetDateTime`
+                started_at AS `started_at!: OffsetDateTime`,
+                height     AS `height!: u16`,
+                width      AS `width!: u16`
             FROM casts
             WHERE uuid=?
             ORDER BY started_at
@@ -200,6 +217,48 @@ impl MariaDB {
         .fetch_all(&self.pool)
         .await?;
         Ok(rows)
+    }
+
+    pub async fn query_marks(&self, id: u32) -> anyhow::Result<Vec<MarkMeta>> {
+        let rows = sqlx::query_as!(
+            MarkMeta,
+            r#"
+            SELECT
+                id         AS `id!: u32`,
+                second     AS `second!: f64`,
+                note       AS `note!: String`
+            FROM marks
+            WHERE cast_id=?
+            ORDER BY second
+            "#,
+            id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn delete_mark(&self, mark_id: u32) -> anyhow::Result<()> {
+        sqlx::query!("DELETE FROM marks WHERE id=?", mark_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn add_mark(&self, cast_id: u32, second: f64, note: String) -> anyhow::Result<u32> {
+        let row = sqlx::query!(
+            r#"
+            INSERT INTO marks (cast_id, second, note)
+                VALUES (?, ?, ?)
+            RETURNING id
+            "#,
+            cast_id,
+            second,
+            note
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.get::<u32, _>(0))
     }
 }
 
@@ -300,9 +359,8 @@ pub mod filters {
     use askama::{Result, Values};
     use time::{OffsetDateTime, UtcOffset, format_description::FormatItem, macros::format_description};
 
-    const HUMAN_FMT: &[FormatItem<'static>] = format_description!(
-        "[month repr:short] [day] [hour repr:24]:[minute]:[second] [period case:upper]"
-    );
+    const HUMAN_FMT: &[FormatItem<'static>] =
+        format_description!("[month repr:short] [day] [hour repr:24]:[minute]:[second] [period case:upper]");
 
     pub fn human(dt: &OffsetDateTime, _vals: &dyn Values) -> Result<String> {
         let local = UtcOffset::current_local_offset()

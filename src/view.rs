@@ -1,12 +1,25 @@
 use tokio::try_join;
 use crate::AppState;
-use crate::models::{AppError, CastMeta, filters};
+use crate::models::{AppError, MarkMeta, filters};
 use askama::Template;
 use askama_web::WebTemplate;
 use axum::extract::{Path, State};
 use std::collections::BTreeMap;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
+use serde::Serialize;
+
+#[derive(Serialize)]
+struct Cast {
+    id: u32,
+    bucket: String,
+    path: String,
+    size_byte: u32,
+    started_at: OffsetDateTime,
+    marks: Vec<MarkMeta>,
+    height: u16,
+    width: u16,
+}
 
 #[derive(Template, WebTemplate)]
 #[template(path = "view.html")]
@@ -15,7 +28,7 @@ pub struct ViewTemplate {
     endpoint: String,
     note: String,
     heartbeats: BTreeMap<usize, Vec<(OffsetDateTime, OffsetDateTime)>>,
-    casts: Vec<CastMeta>,
+    casts: Vec<Cast>,
 }
 
 pub async fn view(State(app): State<AppState>, Path(id): Path<Uuid>) -> Result<ViewTemplate, AppError> {
@@ -25,6 +38,24 @@ pub async fn view(State(app): State<AppState>, Path(id): Path<Uuid>) -> Result<V
         .await?
         .ok_or_else(|| AppError::LogNotFound(id))?;
     let (heartbeats, casts) = try_join!(app.db.query_heartbeats(&id), app.db.query_casts(&id),)?;
+
+    let casts: Vec<Cast> = futures::future::try_join_all(casts.into_iter().map(|cast| {
+            let db = app.db.clone();
+            async move {
+                let marks = db.query_marks(cast.id).await?;
+                anyhow::Ok(Cast {
+                    id: cast.id,
+                    bucket: cast.bucket.clone(),
+                    path: cast.path.clone(),
+                    size_byte: cast.size_byte,
+                    started_at: cast.started_at,
+                    height: cast.height,
+                    width: cast.width,
+                    marks
+                })
+            }
+        })
+    ).await?;
 
     let mut hb_map = BTreeMap::<usize, Vec<(OffsetDateTime, OffsetDateTime)>>::new();
     for itv in heartbeats {

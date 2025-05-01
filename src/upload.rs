@@ -17,13 +17,14 @@ use crate::models::{AppError, Cast, Heartbeats, UploadJson, UploadResp};
 #[derive(Debug, Deserialize, Serialize)]
 struct Header {
     version: u8,
-    width: u32,
-    height: u32,
+    width: u16,
+    height: u16,
     timestamp: i64,
     env: Value,
 }
 
-fn update_cast(src: String) -> anyhow::Result<(i64, String)> {
+// return: timestamp, height, width, notes
+fn update_cast(src: String) -> anyhow::Result<(i64, u16, u16, String)> {
     let mut lines = src.lines().map(str::to_owned).collect::<Vec<_>>();
     let header_line = lines.first().context("empty asciinema log")?.as_str();
     let mut header: Header = serde_json::from_str(header_line).context("invalid header JSON")?;
@@ -40,7 +41,7 @@ fn update_cast(src: String) -> anyhow::Result<(i64, String)> {
         if evt.len() == 3 && evt[1] == "r" {
             if let Some(dim) = evt[2].as_str() {
                 if let Some((w, h)) = dim.split_once('x') {
-                    if let (Ok(w), Ok(h)) = (w.parse::<u32>(), h.parse::<u32>()) {
+                    if let (Ok(w), Ok(h)) = (w.parse::<u16>(), h.parse::<u16>()) {
                         max_w = max_w.max(w);
                         max_h = max_h.max(h);
                     }
@@ -52,7 +53,7 @@ fn update_cast(src: String) -> anyhow::Result<(i64, String)> {
     header.height = max_h;
     lines[0] = serde_json::to_string(&header)?;
 
-    Ok((timestamp, lines.join("\n")))
+    Ok((timestamp, max_h, max_w, lines.join("\n")))
 }
 
 fn parse_log(json: UploadJson) -> anyhow::Result<(String, Heartbeats, Vec<Cast>, String)> {
@@ -89,12 +90,14 @@ fn parse_log(json: UploadJson) -> anyhow::Result<(String, Heartbeats, Vec<Cast>,
         .map(|cast| {
             let filename = cast.filename;
             let content = String::from_utf8(general_purpose::STANDARD.decode(cast.content)?)?;
-            let (timestamp, content) = update_cast(content)?;
+            let (timestamp, height, width, content) = update_cast(content)?;
             let datetime = OffsetDateTime::from_unix_timestamp(timestamp).context("invalid timestamp")?;
             anyhow::Ok(Cast {
                 filename,
                 content,
                 datetime,
+                height,
+                width
             })
         })
         .collect::<anyhow::Result<Vec<_>>>()?;

@@ -11,7 +11,7 @@
             <h3>step 1: run sh command in workspace</h3>
             <pre><code id="copy-cmd" style="overflow-wrap: break-word; white-space: pre-wrap">printf &quot;\033]52;c;%s\a&quot; &quot;$(cd /home/student/.local/state/workspace-logs/ || exit; HB=&quot;&quot;; [ -f heartbeat.log ] &amp;&amp; HB=$(base64 -w 0 &lt; heartbeat.log); CASTS=&quot;$(echo -n &quot;[&quot;; for f in *.cast; do [ -f &quot;$f&quot; ] || continue; c=$(base64 -w 0 &quot;$f&quot;); fn=$(printf '%s' &quot;$f&quot; | sed 's/&quot;/\\&quot;/g'); echo -n &quot;{\&quot;filename\&quot;:\&quot;$fn\&quot;,\&quot;content\&quot;:\&quot;$c\&quot;},&quot;; done | sed 's/,$//'; echo -n &quot;]&quot;)&quot;; JSON=$(printf '{&quot;heartbeat&quot;:&quot;%s&quot;,&quot;casts&quot;:%s}' &quot;$HB&quot; &quot;$CASTS&quot;); base64 -w 0 &lt;&lt;&lt;&quot;$JSON&quot;)&quot;</code></pre>
 
-            <h3>step 2: upload</h3>
+            <h3>step 2: paste</h3>
             <div>
                 <label class="label-block" for="notes">optional notes:</label>
                 <textarea id="notes" type="text" placeholder="notes..."></textarea>
@@ -37,7 +37,8 @@
                 let obj;
                 try {
                     obj = JSON.parse(jsonData);
-                } catch (e) {
+                }
+                catch (e) {
                     console.error("invalid json: ", e.message);
                 }
                 obj["notes"] = notes;
