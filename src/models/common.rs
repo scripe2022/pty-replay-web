@@ -9,7 +9,7 @@ use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use sqlx::QueryBuilder;
 use sqlx::mysql::MySqlPoolOptions;
-use sqlx::{Row, MySql, Pool};
+use sqlx::{MySql, Pool, Row};
 use std::ops::DerefMut;
 use std::sync::Arc;
 use time::OffsetDateTime;
@@ -259,6 +259,13 @@ impl MariaDB {
         .fetch_one(&self.pool)
         .await?;
         Ok(row.get::<u32, _>(0))
+    }
+
+    pub async fn update_note(&self, uuid: Uuid, note: String) -> anyhow::Result<()> {
+        sqlx::query!("UPDATE logs SET note=? WHERE uuid=?", note, uuid.to_string())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 }
 

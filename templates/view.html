@@ -31,6 +31,16 @@
             .marks td:first-child span {
                 font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
             }
+            #note-box .primary {
+                margin-right: 0.5rem;
+            }
+
+            #note-box button.primary,
+            #note-box button.secondary {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.25rem;
+            }
         </style>
         <script src="/replay/static/js/asciinema-player.min.js"></script>
     </head>
@@ -68,8 +78,9 @@
             <h2 class="pico">Uploaded At</h2>
             <span class="pico" style="color: #666">{{uploaded_at | human}}</span>
             <h2 class="pico">Notes</h2>
-            <div class="pico">
-                <pre><code>{{note}}</code></pre>
+            <div id="note-box" class="pico">
+                <button id="note-edit" class="secondary outline" style="float: right">✏️</button>
+                <pre id="note-view"><code>{{ note }}</code></pre>
             </div>
 
             <h2 class="pico">Heartbeats</h2>
@@ -138,7 +149,7 @@
             function renderMarkersTable(container, cast) {
                 const rows = cast.marks
                     .map(m => renderRow(m))
-                    .join('');
+                    .join("");
 
                 container.innerHTML = `<table class="marks" data-cast-id=${cast.id}>
                 <thead>
@@ -174,7 +185,7 @@
                     const box = document.getElementById(`markers-${cast.id}`);
                     if (box) renderMarkersTable(box, cast);
 
-                    const timeSpan = box.querySelector('tbody tr:first-child span');
+                    const timeSpan = box.querySelector("tbody tr:first-child span");
                     setInterval(() => {
                         timeSpan.textContent = secondToTime(player.getCurrentTime());
                     }, 100);
@@ -182,21 +193,21 @@
                 });
             }
 
-            speedSlider.addEventListener('input', async() => {
+            speedSlider.addEventListener("input", async() => {
                 speedVal.value = speedSlider.value;
                 const speed = Number(speedSlider.value);
                 const tasks = [...players.values()].map(player=> player.setSpeed(speed));
                 await Promise.all(tasks);
             });
 
-            const markerBoxes = document.querySelectorAll('.marks-box');
+            const markerBoxes = document.querySelectorAll(".marks-box");
             idleSlider.addEventListener("input", async() => {
                 idleVal.value = idleSlider.value == 62 ? "inf" : idleSlider.value;
                 const idle = idleSlider.value == 62 ? null : Number(idleSlider.value);
                 const tasks = [...players.values()].map(player => player.setIdleTimeLimit(idle));
                 await Promise.all(tasks);
                 markerBoxes.forEach(box => {
-                    box.style.display = idle != null ? 'none': '';
+                    box.style.display = idle != null ? "none": "";
                 });
             });
 
@@ -205,7 +216,7 @@
             async function requestJSON(url, method, body){
                 const r = await fetch(url, {
                     method: method,
-                    headers: { 'Content-Type':'application/json' },
+                    headers: { "Content-Type":"application/json" },
                     body: JSON.stringify(body)
                 });
                 if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
@@ -213,7 +224,7 @@
             }
 
             document.addEventListener("click", async e => {
-                if (e.target.matches('.add-btn, .del-btn')) {
+                if (e.target.matches(".add-btn, .del-btn")) {
                     e.preventDefault();
                 }
                 if (e.target.matches(".add-btn")) {
@@ -242,29 +253,70 @@
                     const newRowHtml = renderRow(mark);
                     let inserted = false;
 
-                    for (const row of tbody.querySelectorAll('tr[data-mark-id]')) {
+                    for (const row of tbody.querySelectorAll("tr[data-mark-id]")) {
                         const rowSec = Number(row.dataset.second);
                         if (rowSec > mark.second) {
-                            row.insertAdjacentHTML('beforebegin', newRowHtml);
+                            row.insertAdjacentHTML("beforebegin", newRowHtml);
                             inserted = true;
                             break;
                         }
                     }
                     if (!inserted) {
-                        tbody.insertAdjacentHTML('beforeend', newRowHtml);
+                        tbody.insertAdjacentHTML("beforeend", newRowHtml);
                     }
-                    noteInput.value = '';
+                    noteInput.value = "";
                 }
                 else if (e.target.matches(".del-btn")) {
                     const row = e.target.closest("tr");
                     const markId = +row.dataset.markId;
                     const castId = +row.closest("table").dataset.castId;
-                    const ok = (await requestJSON('/replay/mark', "DELETE", { mark_id: markId })).ok;
+                    const ok = (await requestJSON("/replay/mark", "DELETE", { mark_id: markId })).ok;
                     if (!ok) return alert("Failed to delete mark");
                     players.get(castId).deleteMarker(markId);
                     row.remove();
                 }
             })
+
+            // note edit
+            const box = document.getElementById("note-box");
+            const view = document.getElementById("note-view");
+            const codeEl = view.querySelector("code");
+            const editBtn = document.getElementById("note-edit");
+            editBtn.addEventListener("click", () => {
+                const txt = document.createElement("textarea");
+                txt.value = view.textContent.trim();
+                txt.style.width = "100%";
+                txt.rows = 2;
+
+                const save = document.createElement("button");
+                save.textContent = "save";
+                save.className = "primary";
+
+                const cancel = document.createElement("button");
+                cancel.textContent = "cancel";
+                cancel.className = "secondary";
+
+                box.replaceChild(txt, view);
+                editBtn.style.display = "none";
+                box.append(save, cancel);
+
+                cancel.onclick = () => {
+                    box.replaceChild(view, txt);
+                    save.remove();
+                    cancel.remove();
+                    editBtn.style.display = "";
+                };
+
+                save.onclick = async() => {
+                    const body = { uuid: {{uuid | json | safe}}, note: txt.value.trim() };
+                    const res = await requestJSON("/replay/note/update", "POST", body);
+                    if (!res.ok) {
+                        return alert("Failed to update note");
+                    }
+                    codeEl.innerText = body.note || '(empty)';
+                    cancel.onclick();
+                }
+            });
         </script>
     </body>
 </html>
