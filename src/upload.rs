@@ -112,8 +112,6 @@ fn update_cast(src: String) -> anyhow::Result<CastPartial> {
     header.height = max_h;
     lines[0] = serde_json::to_string(&header)?;
 
-    dbg!(&max_w, max_h);
-
     Ok(CastPartial {
         timestamp,
         duration,
