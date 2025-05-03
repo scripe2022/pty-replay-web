@@ -4,7 +4,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use base64::{Engine as _, engine::general_purpose};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de};
 use serde_json::Value;
 use std::collections::HashMap;
 use time::{Duration, OffsetDateTime};
@@ -23,37 +23,106 @@ struct Header {
     env: Value,
 }
 
-// return: timestamp, height, width, notes
-fn update_cast(src: String) -> anyhow::Result<(i64, u16, u16, String)> {
-    let mut lines = src.lines().map(str::to_owned).collect::<Vec<_>>();
-    let header_line = lines.first().context("empty asciinema log")?.as_str();
-    let mut header: Header = serde_json::from_str(header_line).context("invalid header JSON")?;
+#[derive(Debug, Serialize)]
+enum AsciinemaEvent {
+    O(Duration),
+    R(Duration, u16, u16),
+}
 
-    let timestamp = header.timestamp;
-    let mut max_w = header.width;
-    let mut max_h = header.height;
+impl<'de> Deserialize<'de> for AsciinemaEvent {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let (sec, tag, payload): (f64, String, String) = Deserialize::deserialize(deserializer)?;
+        let d = Duration::seconds_f64(sec);
 
-    for line in &lines[1..] {
-        let evt: Vec<Value> = match serde_json::from_str(line) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        if evt.len() == 3 && evt[1] == "r" {
-            if let Some(dim) = evt[2].as_str() {
-                if let Some((w, h)) = dim.split_once('x') {
-                    if let (Ok(w), Ok(h)) = (w.parse::<u16>(), h.parse::<u16>()) {
-                        max_w = max_w.max(w);
-                        max_h = max_h.max(h);
-                    }
-                }
+        match tag.as_str() {
+            "o" => Ok(AsciinemaEvent::O(d)),
+            "r" => {
+                let (h, w) = payload
+                    .split_once('x')
+                    .ok_or_else(|| de::Error::custom("stty size wrong"))?;
+                Ok(AsciinemaEvent::R(
+                    d,
+                    h.parse().map_err(de::Error::custom)?,
+                    w.parse().map_err(de::Error::custom)?,
+                ))
             }
+            _ => Err(de::Error::custom(format!("unknown event tag {tag:?}"))),
         }
     }
+}
+
+struct CastPartial {
+    timestamp: i64,
+    duration: Duration,
+    active_duration: Duration,
+    event_count: u32,
+    height: u16,
+    width: u16,
+    content: String,
+}
+
+fn update_cast(src: String) -> anyhow::Result<CastPartial> {
+    let mut lines = src.lines().map(str::to_owned).collect::<Vec<_>>();
+
+    let events = lines
+        .iter()
+        .skip(1)
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect::<Vec<AsciinemaEvent>>();
+
+    let event_count = events.len();
+
+    let header_line = lines.first().context("empty asciinema cast")?.as_str();
+    let mut header: Header = serde_json::from_str(header_line).context("invalid header JSON")?;
+    let timestamp = header.timestamp;
+
+    let resizes = events
+        .iter()
+        .filter_map(|e| match *e {
+            AsciinemaEvent::R(_, w, h) => Some((w, h)),
+            _ => None,
+        })
+        .collect::<Vec<(u16, u16)>>();
+
+    let max_w = resizes.iter().map(|&(w, _)| w).max().unwrap_or(header.width);
+    let max_h = resizes.iter().map(|&(_, h)| h).max().unwrap_or(header.height);
+
+    let duration = events
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            AsciinemaEvent::O(d) => Some(*d),
+            _ => None,
+        })
+        .unwrap_or(Duration::ZERO);
+
+    let duration_active = events
+        .windows(2)
+        .rev()
+        .find_map(|w| match (&w[0], &w[1]) {
+            (AsciinemaEvent::O(_), AsciinemaEvent::O(d)) => Some(*d),
+            _ => None,
+        })
+        .unwrap_or(Duration::ZERO);
+
     header.width = max_w;
     header.height = max_h;
     lines[0] = serde_json::to_string(&header)?;
 
-    Ok((timestamp, max_h, max_w, lines.join("\n")))
+    dbg!(&max_w, max_h);
+
+    Ok(CastPartial {
+        timestamp,
+        duration,
+        active_duration: duration_active,
+        event_count: event_count as u32,
+        height: max_h,
+        width: max_w,
+        content: lines.join("\n"),
+    })
 }
 
 fn parse_log(json: UploadJson) -> anyhow::Result<(String, Heartbeats, Vec<Cast>, String)> {
@@ -90,14 +159,17 @@ fn parse_log(json: UploadJson) -> anyhow::Result<(String, Heartbeats, Vec<Cast>,
         .map(|cast| {
             let filename = cast.filename;
             let content = String::from_utf8(general_purpose::STANDARD.decode(cast.content)?)?;
-            let (timestamp, height, width, content) = update_cast(content)?;
-            let datetime = OffsetDateTime::from_unix_timestamp(timestamp).context("invalid timestamp")?;
+            let cast_partial = update_cast(content)?;
+            let datetime = OffsetDateTime::from_unix_timestamp(cast_partial.timestamp).context("invalid timestamp")?;
             anyhow::Ok(Cast {
                 filename,
-                content,
-                datetime,
-                height,
-                width
+                content: cast_partial.content,
+                started_at: datetime,
+                duration: cast_partial.duration,
+                active_duration: cast_partial.active_duration,
+                event_count: cast_partial.event_count,
+                height: cast_partial.height,
+                width: cast_partial.width,
             })
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
@@ -108,7 +180,6 @@ pub async fn upload(
     State(app): State<AppState>,
     Json(payload): Json<UploadJson>,
 ) -> Result<impl IntoResponse, AppError> {
-
     let uuid = payload.uuid.unwrap_or(Uuid::new_v4());
 
     let (note, hb_itvs, casts, hb_raw) = parse_log(payload).map_err(AppError::BadRequest)?;
@@ -132,7 +203,7 @@ pub async fn upload(
         StatusCode::CREATED,
         Json(UploadResp {
             ok: true,
-            url: format!("/replay/view/{}", uuid)
+            url: format!("/replay/view/{}", uuid),
         }),
     ))
 }
