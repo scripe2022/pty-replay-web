@@ -42,7 +42,6 @@
                     console.error("invalid json: ", e.message);
                 }
                 obj["notes"] = notes;
-                console.log(obj);
 
                 fetch("/replay/upload", {
                     method: "POST",

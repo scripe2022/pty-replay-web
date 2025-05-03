@@ -12,7 +12,7 @@ use sqlx::mysql::MySqlPoolOptions;
 use sqlx::{MySql, Pool, Row};
 use std::ops::DerefMut;
 use std::sync::Arc;
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 pub type Heartbeats = Vec<(usize, OffsetDateTime, OffsetDateTime)>;
@@ -41,7 +41,10 @@ pub struct UploadResp {
 pub struct Cast {
     pub filename: String,
     pub content: String,
-    pub datetime: OffsetDateTime,
+    pub started_at: OffsetDateTime,
+    pub duration: Duration,
+    pub active_duration: Duration,
+    pub event_count: u32,
     pub height: u16,
     pub width: u16,
 }
@@ -72,6 +75,9 @@ pub struct CastMeta {
     pub bucket: String,
     pub path: String,
     pub size_byte: u32,
+    pub duration: Duration,
+    pub active_duration: Duration,
+    pub event_count: u32,
     pub started_at: OffsetDateTime,
     pub height: u16,
     pub width: u16,
@@ -122,14 +128,18 @@ impl MariaDB {
 
         let bucket = std::env::var("S3_BUCKET").unwrap();
         let key = format!("{}/{}", std::env::var("S3_KEY_PREFIX").unwrap_or_default(), &uuid_str);
-        let mut qb: QueryBuilder<MySql> =
-            QueryBuilder::new(r#"INSERT INTO casts (uuid, bucket, path, size_byte, started_at, height, width)"#);
+        let mut qb: QueryBuilder<MySql> = QueryBuilder::new(
+            r#"INSERT INTO casts (uuid, bucket, path, size_byte, duration, active_duration, event_count, started_at, height, width)"#,
+        );
         qb.push_values(casts.iter(), |mut b, cast| {
             b.push_bind(&uuid_str);
             b.push_bind(&bucket);
             b.push_bind(format!("{}/{}", key, cast.filename));
             b.push_bind(cast.content.len() as u32);
-            b.push_bind(cast.datetime);
+            b.push_bind(cast.duration.whole_milliseconds() as u64);
+            b.push_bind(cast.active_duration.whole_milliseconds() as u64);
+            b.push_bind(cast.event_count);
+            b.push_bind(cast.started_at);
             b.push_bind(cast.height);
             b.push_bind(cast.width);
         });
@@ -197,17 +207,34 @@ impl MariaDB {
     }
 
     pub async fn query_casts(&self, uuid: &Uuid) -> anyhow::Result<Vec<CastMeta>> {
+        #[derive(Debug, Serialize, sqlx::FromRow)]
+        pub struct CastMetaRaw {
+            pub id: u32,
+            pub bucket: String,
+            pub path: String,
+            pub size_byte: u32,
+            pub duration: u64,
+            pub active_duration: u64,
+            pub event_count: u32,
+            pub started_at: OffsetDateTime,
+            pub height: u16,
+            pub width: u16,
+        }
+
         let rows = sqlx::query_as!(
-            CastMeta,
+            CastMetaRaw,
             r#"
             SELECT
-                id         AS `id!: u32`,
-                bucket     AS `bucket!: String`,
-                path       AS `path!: String`,
-                size_byte  AS `size_byte!: u32`,
-                started_at AS `started_at!: OffsetDateTime`,
-                height     AS `height!: u16`,
-                width      AS `width!: u16`
+                id                AS `id!: u32`,
+                bucket            AS `bucket!: String`,
+                path              AS `path!: String`,
+                size_byte         AS `size_byte!: u32`,
+                duration          AS `duration!: u64`,
+                active_duration   AS `active_duration!: u64`,
+                event_count       AS `event_count!: u32`,
+                started_at        AS `started_at!: OffsetDateTime`,
+                height            AS `height!: u16`,
+                width             AS `width!: u16`
             FROM casts
             WHERE uuid=?
             ORDER BY started_at
@@ -216,7 +243,24 @@ impl MariaDB {
         )
         .fetch_all(&self.pool)
         .await?;
-        Ok(rows)
+
+        let casts = rows
+            .into_iter()
+            .map(|row| CastMeta {
+                id: row.id,
+                bucket: row.bucket,
+                path: row.path,
+                size_byte: row.size_byte,
+                duration: Duration::milliseconds(row.duration as i64),
+                active_duration: Duration::milliseconds(row.active_duration as i64),
+                event_count: row.event_count,
+                started_at: row.started_at,
+                height: row.height,
+                width: row.width,
+            })
+            .collect::<Vec<CastMeta>>();
+
+        Ok(casts)
     }
 
     pub async fn query_marks(&self, id: u32) -> anyhow::Result<Vec<MarkMeta>> {

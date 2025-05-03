@@ -1,13 +1,13 @@
-use tokio::try_join;
 use crate::AppState;
 use crate::models::{AppError, MarkMeta, filters};
 use askama::Template;
 use askama_web::WebTemplate;
 use axum::extract::{Path, State};
+use serde::Serialize;
 use std::collections::BTreeMap;
 use time::{Duration, OffsetDateTime};
+use tokio::try_join;
 use uuid::Uuid;
-use serde::Serialize;
 
 #[derive(Serialize)]
 struct Cast {
@@ -15,6 +15,9 @@ struct Cast {
     bucket: String,
     path: String,
     size_byte: u32,
+    duration: Duration,
+    active_duration: Duration,
+    event_count: u32,
     started_at: OffsetDateTime,
     marks: Vec<MarkMeta>,
     height: u16,
@@ -27,9 +30,19 @@ pub struct ViewTemplate {
     uploaded_at: OffsetDateTime,
     endpoint: String,
     note: String,
-    heartbeats: BTreeMap<usize, Vec<(OffsetDateTime, OffsetDateTime)>>,
+    heartbeats: Vec<(usize, OffsetDateTime, OffsetDateTime)>,
     casts: Vec<Cast>,
-    uuid: Uuid
+    uuid: Uuid,
+}
+
+impl Cast {
+    pub fn is_short(&self) -> bool {
+        self.active_duration < Duration::seconds(3) && self.event_count < 10
+    }
+    pub fn duration_mmss(&self) -> String {
+        let s = self.duration.whole_seconds();
+        format!("{}m{:02}s", s / 60, s % 60)
+    }
 }
 
 pub async fn view(State(app): State<AppState>, Path(id): Path<Uuid>) -> Result<ViewTemplate, AppError> {
@@ -41,22 +54,25 @@ pub async fn view(State(app): State<AppState>, Path(id): Path<Uuid>) -> Result<V
     let (heartbeats, casts) = try_join!(app.db.query_heartbeats(&id), app.db.query_casts(&id),)?;
 
     let casts: Vec<Cast> = futures::future::try_join_all(casts.into_iter().map(|cast| {
-            let db = app.db.clone();
-            async move {
-                let marks = db.query_marks(cast.id).await?;
-                anyhow::Ok(Cast {
-                    id: cast.id,
-                    bucket: cast.bucket.clone(),
-                    path: cast.path.clone(),
-                    size_byte: cast.size_byte,
-                    started_at: cast.started_at,
-                    height: cast.height,
-                    width: cast.width,
-                    marks
-                })
-            }
-        })
-    ).await?;
+        let db = app.db.clone();
+        async move {
+            let marks = db.query_marks(cast.id).await?;
+            anyhow::Ok(Cast {
+                id: cast.id,
+                bucket: cast.bucket.clone(),
+                path: cast.path.clone(),
+                size_byte: cast.size_byte,
+                duration: cast.duration,
+                active_duration: cast.active_duration,
+                event_count: cast.event_count,
+                started_at: cast.started_at,
+                height: cast.height,
+                width: cast.width,
+                marks,
+            })
+        }
+    }))
+    .await?;
 
     let mut hb_map = BTreeMap::<usize, Vec<(OffsetDateTime, OffsetDateTime)>>::new();
     for itv in heartbeats {
@@ -71,7 +87,7 @@ pub async fn view(State(app): State<AppState>, Path(id): Path<Uuid>) -> Result<V
         .unwrap_or(30);
     let gap = Duration::seconds(gap);
 
-    let mut heartbeats = BTreeMap::<usize, Vec<(OffsetDateTime, OffsetDateTime)>>::new();
+    let mut heartbeats = Vec::<(usize, OffsetDateTime, OffsetDateTime)>::new();
 
     for (&session, hbs) in hb_map.iter() {
         let itvs = hbs
@@ -84,8 +100,10 @@ pub async fn view(State(app): State<AppState>, Path(id): Path<Uuid>) -> Result<V
                 }
                 acc
             });
-        heartbeats.insert(session, itvs);
+        heartbeats.extend(itvs.into_iter().map(|(s, e)| (session, s, e)));
     }
+
+    heartbeats.sort_by_key(|&(_, s, _)| s);
 
     let endpoint = std::env::var("S3_BUCKET_ENDPOINT").unwrap_or_default();
     Ok(ViewTemplate {

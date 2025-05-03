@@ -4,18 +4,9 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Replay: {{note}}</title>
-        <link rel="stylesheet" href="/replay/static/css/asciinema-player.css" />
         <link rel="stylesheet" href="/replay/static/css/pico.min.css" />
+        <link rel="stylesheet" href="/replay/static/css/asciinema-player.css" />
         <style>
-            table.heartbeats {
-                border-collapse: collapse;
-            }
-            table.heartbeats tbody.session + tbody.session {
-                border-top: 2px solid #d0d0d0;
-            }
-            table.heartbeats tbody.session:first-child {
-                border-top: none;
-            }
             .marks td:last-child,
             .marks th:last-child {
                 width: 1%;
@@ -40,6 +31,59 @@
                 display: inline-flex;
                 align-items: center;
                 gap: 0.25rem;
+            }
+
+            details {
+                margin: 1rem 0;
+                border: none;
+            }
+
+            summary {
+                position: relative;
+                list-style: none;
+                cursor: pointer;
+                padding: 0.75rem 1rem;
+                font-weight: 600;
+                user-select: none;
+
+                border: 1px solid #d0d0d0;
+                border-radius: 0.375rem;
+                background: #fafafa;
+                transition:
+                    background 0.2s,
+                    border-color 0.2s;
+            }
+            summary:hover {
+                border-color: #bbb;
+            }
+
+            summary::-webkit-details-marker {
+                display: none;
+            }
+            summary::before {
+                content: "▶";
+                display: inline-block;
+                margin-right: 0.5rem;
+                font-size: 0.75em;
+                transition: transform 0.2s;
+            }
+            details[open] summary::before {
+                transform: rotate(90deg);
+            }
+
+            details[open] summary {
+                border-bottom-left-radius: 0;
+                border-bottom-right-radius: 0;
+            }
+
+            details[open] > :not(summary) {
+                background: #fff;
+                margin: 20px 0;
+            }
+
+            summary:focus-visible {
+                outline: 3px solid #2684ff;
+                outline-offset: 2px;
             }
         </style>
         <script src="/replay/static/js/asciinema-player.min.js"></script>
@@ -76,7 +120,7 @@
                 </label>
             </div>
             <h2 class="pico">Uploaded At</h2>
-            <span class="pico" style="color: #666">{{uploaded_at | human}}</span>
+            <span class="pico" style="color: #666">{{ uploaded_at | human }}</span>
             <h2 class="pico">Notes</h2>
             <div id="note-box" class="pico">
                 <button id="note-edit" class="secondary outline" style="float: right">✏️</button>
@@ -93,28 +137,31 @@
                         <th scope="col">Duration</th>
                     </tr>
                 </thead>
-                {% for (session, itvs) in heartbeats %}
                 <tbody class="session">
-                    {% for itv in itvs %}
+                    {% for (session, s, e) in heartbeats %}
                     <tr>
                         <td>{{ session }}</td>
-                        <td>{{ itv.0 | human }}</td>
-                        <td>{{ itv.1 | human }}</td>
-                        <td>{{ itv.1 - itv.0 }}</td>
+                        <td>{{ s | human }}</td>
+                        <td>{{ e | human }}</td>
+                        <td>{{ *e - *s }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
-                {% endfor %}
             </table>
-
             {% for cast in casts %}
             <h2 class="pico">Cast {{loop.index}}</h2>
-            <p style="color: #666">{{cast.started_at | human}}, {{cast.size_byte}} Bytes</p>
-            <div class="asc-player">
-                <div id="player-{{cast.id}}">Loading...</div>
-                <div class="pico marks-box" id="markers-{{cast.id}}"></div>
-            </div>
-            {% endfor %}
+            {% if cast.is_short() %}
+            <details>
+                <summary role="button">short recording hide by default</summary>
+                {% endif %}
+                <p style="color: #666" class="pico">{{cast.started_at | human}}, {{cast.duration_mmss()}}</p>
+                <div class="asc-player">
+                    <div class="pty-player" id="player-{{cast.id}}">Loading...</div>
+                    <div class="pico marks-box" id="markers-{{cast.id}}"></div>
+                    {% if cast.is_short() %}
+                </div>
+            </details>
+            {% endif %} {% endfor %}
         </main>
 
         <script type="module">
