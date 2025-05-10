@@ -87,8 +87,20 @@
         </style>
         <script src="/replay/static/js/asciinema-player.min.js"></script>
     </head>
-    <body style="margin: 2rem 0rem">
+    <body style="margin: 1rem 0rem">
         <main class="container">
+            <div class="pico">
+                <nav>
+                    <ul>
+                        <li><strong>Player</strong></li>
+                    </ul>
+                    <ul>
+                        <li><a href="/replay/">Home</a></li>
+                        <li><a href="/replay/list">List</a></li>
+                    </ul>
+                </nav>
+            </div>
+
             <div class="pico">
                 <label>
                     Speed:
@@ -283,7 +295,7 @@
                     const sec = players.get(castId).getCurrentTime();
 
                     const resp = await requestJSON(
-                        `/replay/mark`,
+                        `/replay/api/mark`,
                         "POST",
                         { cast_id: castId, second: sec, note }
                     );
@@ -316,7 +328,7 @@
                     const row = e.target.closest("tr");
                     const markId = +row.dataset.markId;
                     const castId = +row.closest("table").dataset.castId;
-                    const ok = (await requestJSON("/replay/mark", "DELETE", { mark_id: markId })).ok;
+                    const ok = (await requestJSON("/replay/api/mark", "DELETE", { mark_id: markId })).ok;
                     if (!ok) return alert("Failed to delete mark");
                     players.get(castId).deleteMarker(markId);
                     row.remove();
@@ -355,7 +367,7 @@
 
                 save.onclick = async() => {
                     const body = { uuid: {{uuid | json | safe}}, note: txt.value.trim() };
-                    const res = await requestJSON("/replay/note/update", "POST", body);
+                    const res = await requestJSON("/replay/api/note", "POST", body);
                     if (!res.ok) {
                         return alert("Failed to update note");
                     }

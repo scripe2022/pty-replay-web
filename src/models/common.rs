@@ -297,6 +297,13 @@ impl MariaDB {
             .await?;
         Ok(())
     }
+
+    pub async fn update_visible(&self, uuid: Uuid, visible: bool) -> anyhow::Result<()> {
+        sqlx::query!("UPDATE logs SET visible=? WHERE uuid=?", visible, uuid.to_string())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 }
 
 #[derive(Clone)]

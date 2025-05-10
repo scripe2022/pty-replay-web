@@ -29,6 +29,9 @@ use mark::{add_mark, del_mark};
 mod note;
 use note::note_update;
 
+mod visible;
+use visible::visible;
+
 #[derive(Clone)]
 struct AppState {
     db: MariaDB,
@@ -54,12 +57,14 @@ async fn main() -> anyhow::Result<()> {
             ServeDir::new(concat!(env!("CARGO_MANIFEST_DIR"), "/static")),
         )
         .route("/replay/view/{id}", get(view))
-        .route("/replay/mark", delete(del_mark))
-        .route("/replay/mark", post(add_mark))
-        .route("/replay/note/update", post(note_update))
         .route("/replay/", get(index))
         .route("/replay/list", get(list))
-        .route("/replay/upload", post(upload))
+
+        .route("/replay/api/mark", delete(del_mark))
+        .route("/replay/api/mark", post(add_mark))
+        .route("/replay/api/note", post(note_update))
+        .route("/replay/api/upload", post(upload))
+        .route("/replay/api/visible", post(visible))
         .with_state(state);
     let listener = tokio::net::TcpListener::bind(address).await.unwrap();
 

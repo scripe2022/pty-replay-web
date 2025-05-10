@@ -9,17 +9,46 @@
 
     <body style="margin: 1rem 0rem">
         <main class="pico container">
-            <h1>Replay List</h1>
+            <nav>
+                <ul>
+                    <li><strong>Replay List</strong></li>
+                </ul>
+                <ul>
+                    <li><input id="show-all" type="checkbox" role="switch" />Show All</li>
+                    <li><a href="/replay/">Home</a></li>
+                    <li><a href="/replay/list">List</a></li>
+                </ul>
+            </nav>
+
+            <label style="display: flex; gap: 0.5rem; align-items: center"> </label>
 
             <label>
-                <input id="log-filter" type="search" placeholder="Search notes..." autocomplete="off" />
+                <input
+                    id="log-filter"
+                    type="search"
+                    placeholder="Search notes (regex)..."
+                    autocomplete="off"
+                />
             </label>
 
             {% for log in logs %}
-            <article class="log-item">
-                <h4>
-                    <a href="/replay/view/{{log.uuid}}">{{log.uuid}}</a>
-                </h4>
+            <article class="log-item" data-uuid="{{ log.uuid }}" data-visible="{{ log.visible }}">
+                <div style="display: flex; justify-content: space-between">
+                    <h4><a href="/replay/view/{{log.uuid}}">{{log.uuid}}</a></h4>
+                    <label class="vis-switch" style="display: none">
+                        <input
+                            name="opt-in"
+                            type="checkbox"
+                            role="switch"
+                            {%
+                            if
+                            log.visible
+                            %}checked{%
+                            endif
+                            %}
+                        />
+                    </label>
+                </div>
                 <p>Uploaded At <span style="color: #666">{{log.uploaded_at | human}}</span></p>
                 <pre><code class="note">{{log.note}}</code></pre>
             </article>
@@ -28,15 +57,60 @@
 
         <script>
             const q = document.getElementById("log-filter");
-            const all = [...document.querySelectorAll(".log-item")];
+            const showAll = document.getElementById("show-all");
+            const items = [...document.querySelectorAll(".log-item")];
 
-            q.addEventListener("input", () => {
-                const needle = q.value.trim().toLowerCase();
-                all.forEach((el) => {
-                    const haystack = el.querySelector(".note").textContent.toLowerCase();
-                    el.style.display = needle === "" || haystack.includes(needle) ? "" : "none";
+            function applyFilters() {
+                const pattern = q.value.trim();
+                let re = null;
+
+                if (pattern !== "") {
+                    try {
+                        re = new RegExp(pattern, "i");
+                    } catch {}
+                }
+
+                const wantAll = showAll.checked;
+
+                items.forEach((el) => {
+                    const note = el.querySelector(".note").textContent;
+                    const matches = !re || re.test(note);
+                    const allowed = wantAll || el.dataset.visible === "true";
+                    el.style.display = matches && allowed ? "" : "none";
                 });
+            }
+
+            function initVisSwitches() {
+                const wantAll = showAll.checked;
+
+                items.forEach((el) => {
+                    const w = el.querySelector(".vis-switch");
+                    w.style.display = wantAll ? "" : "none";
+
+                    if (wantAll) {
+                        const chk = w.querySelector("input");
+                        chk.addEventListener("change", () => {
+                            el.dataset.visible = chk.checked;
+                            fetch("/replay/api/visible", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    uuid: el.dataset.uuid,
+                                    visible: chk.checked,
+                                }),
+                            }).catch(console.error);
+                        });
+                    }
+                });
+            }
+
+            q.addEventListener("input", applyFilters);
+            showAll.addEventListener("change", () => {
+                initVisSwitches();
+                applyFilters();
             });
+
+            initVisSwitches();
         </script>
     </body>
 </html>
