@@ -2134,6 +2134,7 @@ dependencies = [
  "dotenvy",
  "flate2",
  "futures",
+ "regex",
  "serde",
  "serde_json",
  "sqlx",

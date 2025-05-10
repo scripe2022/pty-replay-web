@@ -1,9 +1,11 @@
 use anyhow::{Context, anyhow, bail};
 use base64::Engine as _;
 use flate2::read::GzDecoder;
+use regex::Regex;
 use serde::Deserialize;
 use serde_json::Value;
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use std::sync::LazyLock;
+use time::OffsetDateTime;
 
 use std::io::Read;
 
@@ -12,36 +14,15 @@ use std::io::Read;
 enum Event {
     Heartbeat(Vec<(OffsetDateTime, usize)>),
     Cast(String, String),
-    #[allow(dead_code)]
-    Info(OffsetDateTime, String),
-    #[allow(dead_code)]
-    Warning(OffsetDateTime, String),
-    #[allow(dead_code)]
-    Error(OffsetDateTime, String),
 }
 
 impl TryFrom<&str> for Event {
     type Error = anyhow::Error;
 
     fn try_from(line: &str) -> anyhow::Result<Self> {
-        let (at, ev) = line.split_once(' ').context("Invalid log line")?;
-        let at = OffsetDateTime::parse(at, &Rfc3339).context("Invalid timestamp")?;
-
-        let (kind, payload): (String, Value) = serde_json::from_str(ev).context("Invalid event")?;
+        let (kind, payload): (String, Value) = serde_json::from_str(line).context("Invalid event")?;
 
         match kind.as_str() {
-            "info" | "warning" | "error" => {
-                let payload = payload
-                    .as_str()
-                    .ok_or_else(|| anyhow!("{kind} expects string payload"))?
-                    .to_owned();
-                match kind.as_str() {
-                    "info" => Ok(Event::Info(at, payload)),
-                    "warning" => Ok(Event::Warning(at, payload)),
-                    "error" => Ok(Event::Error(at, payload)),
-                    _ => unreachable!(),
-                }
-            }
             "cast" => {
                 let (filename, content): (String, String) =
                     serde_json::from_value(payload).context("cast payload expects [filename, content]")?;
@@ -83,7 +64,15 @@ pub struct CastRaw {
     pub content: String,
 }
 
+static TS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z ").unwrap());
+
+pub fn strip_timestamps<S: AsRef<str>>(input: S) -> String {
+    TS_RE.replace_all(input.as_ref(), "").into_owned()
+}
+
 pub fn parse_log(buf: &str) -> (Vec<HBRaw>, Vec<CastRaw>) {
+    let buf = strip_timestamps(buf);
     let lines = buf.lines().collect::<Vec<_>>();
     let events = lines
         .into_iter()
