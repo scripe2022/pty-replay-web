@@ -1,7 +1,3 @@
-// run  := cargo run
-// dir  := .
-// kid  :=
-
 use anyhow::Context;
 use axum::Router;
 use axum::routing::{get, post, delete};
