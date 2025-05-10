@@ -9,7 +9,7 @@
     <body style="margin: 1rem 0rem">
         <main class="pico container">
             <h3>step 1: run sh command in workspace</h3>
-            <pre><code id="copy-cmd" style="overflow-wrap: break-word; white-space: pre-wrap">printf &quot;\033]52;c;%s\a&quot; &quot;$(cd /home/student/.local/state/workspace-logs/ || exit; frfc() { e=$(stat -c %W &quot;$1&quot;); [[ $e == -1 ]] &amp;&amp; e=$(stat -c %Y &quot;$1&quot;); date -u -d &quot;@$e&quot; +%Y-%m-%dT%H:%M:%SZ;}; [ -f heartbeat.log ] &amp;&amp; HB=`awk &#39;NF==2{printf(&quot;%s[%s,%s]&quot;,(n++?&quot;,&quot;:&quot;[&quot;),$2,$1)}END{if(n)print&quot;]&quot;}&#39; heartbeat.log`; HB=&quot;$(frfc heartbeat.log) [\&quot;heartbeat\&quot;,$HB]&quot;; CASTS=&quot;$(for f in *.cast; do [ -f &quot;$f&quot; ] || continue; c=$(cat &quot;$f&quot; | gzip -c -n | base64 -w0); fn=$(printf &#39;%s&#39; &quot;$f&quot; | sed &#39;s/&quot;/\\&quot;/g&#39;); echo &quot;$(frfc $f) [\&quot;cast\&quot;,[\&quot;$fn\&quot;,\&quot;$c\&quot;]]&quot;; done | sed &#39;s/,$//&#39;)&quot;; JSON=$(printf &#39;%s\n%s\n&#39; &quot;$HB&quot; &quot;$CASTS&quot;); base64 -w 0 &lt;&lt;&lt;&quot;$JSON&quot;)&quot;</code></pre>
+            <pre><code id="copy-cmd" style="overflow-wrap: break-word; white-space: pre-wrap">printf &quot;\033]52;c;%s\a&quot; &quot;$(cd /home/student/.local/state/workspace-logs/ || exit; [ -f heartbeat.log ] &amp;&amp; HB=$(awk &#39;NF==2{printf(&quot;%s[%s,%s]&quot;,(n++?&quot;,&quot;:&quot;[&quot;),$2,$1)}END{if(n)print&quot;]&quot;}&#39; heartbeat.log); HB=&quot;[\&quot;heartbeat\&quot;,$HB]&quot;; CASTS=&quot;$(for f in *.cast; do [ -f &quot;$f&quot; ] || continue; c=$(cat &quot;$f&quot; | gzip -c -n | base64 -w0); fn=$(printf &#39;%s&#39; &quot;$f&quot; | sed &#39;s/&quot;/\\&quot;/g&#39;); echo &quot;[\&quot;cast\&quot;,[\&quot;$fn\&quot;,\&quot;$c\&quot;]]&quot;; done | sed &#39;s/,$//&#39;)&quot;; JSON=$(printf &#39;%s\n%s\n&#39; &quot;$HB&quot; &quot;$CASTS&quot;); base64 -w 0 &lt;&lt;&lt;&quot;$JSON&quot;)&quot;</code></pre>
 
             <h3>step 2: paste</h3>
             <div>
@@ -38,6 +38,7 @@
                     notes: notes,
                     logs: jsonData,
                 };
+                console.log(obj);
 
                 fetch("/replay/upload", {
                     method: "POST",
