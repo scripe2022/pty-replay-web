@@ -3,16 +3,17 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use base64::{Engine as _, engine::general_purpose};
 use serde::{Deserialize, Serialize, de};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::path::Path;
 use time::{Duration, OffsetDateTime};
 use tokio::try_join;
 use uuid::Uuid;
 
 use crate::AppState;
-use crate::models::{AppError, Cast, Heartbeats, UploadJson, UploadResp};
+use crate::models::log::{CastRaw, HBRaw, parse_log};
+use crate::models::{AppError, Cast, Heartbeats, UploadResp};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct Header {
@@ -123,22 +124,14 @@ fn update_cast(src: String) -> anyhow::Result<CastPartial> {
     })
 }
 
-fn parse_log(json: UploadJson) -> anyhow::Result<(String, Heartbeats, Vec<Cast>, String)> {
+fn process(hbs_raw: &[HBRaw], casts_raw: &[CastRaw]) -> anyhow::Result<(Heartbeats, Vec<Cast>)> {
     let mut hb_map = HashMap::<usize, Vec<OffsetDateTime>>::new();
-    let note = json.notes;
-    let hb_raw = String::from_utf8(general_purpose::STANDARD.decode(json.heartbeat)?)?;
-    hb_raw.lines().for_each(|line| {
-        if let Some((session, ts)) = line.split_once(' ') {
-            if let (Ok(session), Ok(ts)) = (session.parse::<usize>(), ts.parse::<i64>()) {
-                if let Ok(ts) = OffsetDateTime::from_unix_timestamp(ts) {
-                    hb_map.entry(session).or_default().push(ts);
-                }
-            }
-        }
+    hbs_raw.iter().for_each(|x| {
+        hb_map.entry(x.session).or_default().push(x.time);
     });
     let mut hb_itvs = Vec::<(usize, OffsetDateTime, OffsetDateTime)>::new();
     let gap = Duration::seconds(10);
-    for (session, hbs) in hb_map.iter() {
+    for (session, hbs) in hb_map.into_iter() {
         let itvs = hbs
             .iter()
             .copied()
@@ -149,20 +142,24 @@ fn parse_log(json: UploadJson) -> anyhow::Result<(String, Heartbeats, Vec<Cast>,
                 }
                 acc
             });
-        hb_itvs.extend(itvs.into_iter().map(|(start, end)| (*session, start, end)));
+        hb_itvs.extend(itvs.into_iter().map(|(start, end)| (session, start, end)));
     }
-    let casts = json
-        .casts
-        .into_iter()
+
+    let casts = casts_raw
+        .iter()
         .map(|cast| {
-            let filename = cast.filename;
-            let content = String::from_utf8(general_purpose::STANDARD.decode(cast.content)?)?;
+            let filename = Path::new(&cast.filename)
+                .file_name()
+                .context("invalid filename")?
+                .to_string_lossy()
+                .to_string();
+            let content = cast.content.clone();
             let cast_partial = update_cast(content)?;
             let datetime = OffsetDateTime::from_unix_timestamp(cast_partial.timestamp).context("invalid timestamp")?;
             anyhow::Ok(Cast {
                 filename,
-                content: cast_partial.content,
                 started_at: datetime,
+                content: cast_partial.content,
                 duration: cast_partial.duration,
                 active_duration: cast_partial.active_duration,
                 event_count: cast_partial.event_count,
@@ -171,16 +168,25 @@ fn parse_log(json: UploadJson) -> anyhow::Result<(String, Heartbeats, Vec<Cast>,
             })
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
-    anyhow::Ok((note, hb_itvs, casts, hb_raw))
+    Ok((hb_itvs, casts))
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct UploadMeta {
+    notes: String,
+    logs: String,
+    uuid: Option<Uuid>,
 }
 
 pub async fn upload(
     State(app): State<AppState>,
-    Json(payload): Json<UploadJson>,
+    Json(payload): Json<UploadMeta>,
 ) -> Result<impl IntoResponse, AppError> {
     let uuid = payload.uuid.unwrap_or(Uuid::new_v4());
-
-    let (note, hb_itvs, casts, hb_raw) = parse_log(payload).map_err(AppError::BadRequest)?;
+    let notes = payload.notes;
+    let (hbs_raw, casts_raw) = parse_log(&payload.logs);
+    let (hb_itvs, casts) = process(&hbs_raw, &casts_raw).map_err(AppError::BadRequest)?;
+    let hbs_raw = format!("{:?}", hbs_raw);
 
     try_join!(
         async {
@@ -188,11 +194,11 @@ pub async fn upload(
             Ok::<_, AppError>(())
         },
         async {
-            app.minio.upload_heartbeats(&uuid, &hb_raw).await?;
+            app.minio.upload_heartbeats(&uuid, &hbs_raw).await?;
             Ok::<_, AppError>(())
         },
         async {
-            app.db.insert(&uuid, &note, &hb_itvs, &casts).await?;
+            app.db.insert(&uuid, &notes, &hb_itvs, &casts).await?;
             Ok::<_, AppError>(())
         },
     )?;

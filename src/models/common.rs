@@ -6,7 +6,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::response::Response;
 use futures::future::try_join_all;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sqlx::QueryBuilder;
 use sqlx::mysql::MySqlPoolOptions;
 use sqlx::{MySql, Pool, Row};
@@ -16,20 +16,6 @@ use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 pub type Heartbeats = Vec<(usize, OffsetDateTime, OffsetDateTime)>;
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct CastJson {
-    pub content: String,
-    pub filename: String,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct UploadJson {
-    pub casts: Vec<CastJson>,
-    pub heartbeat: String,
-    pub notes: String,
-    pub uuid: Option<Uuid>,
-}
 
 #[derive(Serialize)]
 pub struct UploadResp {
