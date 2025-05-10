@@ -9,7 +9,7 @@
     <body style="margin: 1rem 0rem">
         <main class="pico container">
             <h3>step 1: run sh command in workspace</h3>
-            <pre><code id="copy-cmd" style="overflow-wrap: break-word; white-space: pre-wrap">printf &quot;\033]52;c;%s\a&quot; &quot;$(cd /home/student/.local/state/workspace-logs/ || exit; HB=&quot;&quot;; [ -f heartbeat.log ] &amp;&amp; HB=$(base64 -w 0 &lt; heartbeat.log); CASTS=&quot;$(echo -n &quot;[&quot;; for f in *.cast; do [ -f &quot;$f&quot; ] || continue; c=$(base64 -w 0 &quot;$f&quot;); fn=$(printf '%s' &quot;$f&quot; | sed 's/&quot;/\\&quot;/g'); echo -n &quot;{\&quot;filename\&quot;:\&quot;$fn\&quot;,\&quot;content\&quot;:\&quot;$c\&quot;},&quot;; done | sed 's/,$//'; echo -n &quot;]&quot;)&quot;; JSON=$(printf '{&quot;heartbeat&quot;:&quot;%s&quot;,&quot;casts&quot;:%s}' &quot;$HB&quot; &quot;$CASTS&quot;); base64 -w 0 &lt;&lt;&lt;&quot;$JSON&quot;)&quot;</code></pre>
+            <pre><code id="copy-cmd" style="overflow-wrap: break-word; white-space: pre-wrap">printf &quot;\033]52;c;%s\a&quot; &quot;$(cd /home/student/.local/state/workspace-logs/ || exit; frfc() { e=$(stat -c %W &quot;$1&quot;); [[ $e == -1 ]] &amp;&amp; e=$(stat -c %Y &quot;$1&quot;); date -u -d &quot;@$e&quot; +%Y-%m-%dT%H:%M:%SZ;}; [ -f heartbeat.log ] &amp;&amp; HB=`awk &#39;NF==2{printf(&quot;%s[%s,%s]&quot;,(n++?&quot;,&quot;:&quot;[&quot;),$2,$1)}END{if(n)print&quot;]&quot;}&#39; heartbeat.log`; HB=&quot;$(frfc heartbeat.log) [\&quot;heartbeat\&quot;,$HB]&quot;; CASTS=&quot;$(for f in *.cast; do [ -f &quot;$f&quot; ] || continue; c=$(cat &quot;$f&quot; | gzip -c -n | base64 -w0); fn=$(printf &#39;%s&#39; &quot;$f&quot; | sed &#39;s/&quot;/\\&quot;/g&#39;); echo &quot;$(frfc $f) [\&quot;cast\&quot;,[\&quot;$fn\&quot;,\&quot;$c\&quot;]]&quot;; done | sed &#39;s/,$//&#39;)&quot;; JSON=$(printf &#39;%s\n%s\n&#39; &quot;$HB&quot; &quot;$CASTS&quot;); base64 -w 0 &lt;&lt;&lt;&quot;$JSON&quot;)&quot;</code></pre>
 
             <h3>step 2: paste</h3>
             <div>
@@ -34,14 +34,10 @@
             document.getElementById("submit-button").addEventListener("click", () => {
                 const notes = document.getElementById("notes").value;
                 const jsonData = document.getElementById("json-data").value;
-                let obj;
-                try {
-                    obj = JSON.parse(jsonData);
-                }
-                catch (e) {
-                    console.error("invalid json: ", e.message);
-                }
-                obj["notes"] = notes;
+                obj = {
+                    notes: notes,
+                    logs: jsonData,
+                };
 
                 fetch("/replay/upload", {
                     method: "POST",
