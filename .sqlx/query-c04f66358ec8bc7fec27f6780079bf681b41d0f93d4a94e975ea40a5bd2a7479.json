@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE logs SET note=? WHERE uuid=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c04f66358ec8bc7fec27f6780079bf681b41d0f93d4a94e975ea40a5bd2a7479"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE logs SET visible=? WHERE uuid=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "3703e18a1b8bf2cc0b57d6db81893325f15eb9c4694f6c9c505db1171b39224a"
+}

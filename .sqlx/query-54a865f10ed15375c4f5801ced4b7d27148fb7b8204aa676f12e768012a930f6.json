@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM marks WHERE id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "54a865f10ed15375c4f5801ced4b7d27148fb7b8204aa676f12e768012a930f6"
+}

@@ -1,0 +1,54 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            SELECT\n                uuid        AS `uuid!: String`,\n                note        AS `note!: String`,\n                uploaded_at AS `uploaded_at!: OffsetDateTime`,\n                visible     AS `visible!: bool`\n            FROM logs\n            ORDER BY uploaded_at DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uuid!: String",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | UNIQUE_KEY | UNSIGNED | BINARY | NO_DEFAULT_VALUE",
+          "max_size": 144
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "note!: String",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "uploaded_at!: OffsetDateTime",
+        "type_info": {
+          "type": "Timestamp",
+          "flags": "NOT_NULL | UNSIGNED | BINARY | TIMESTAMP",
+          "max_size": 19
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "visible!: bool",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "NOT_NULL",
+          "max_size": 1
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ad319dd858e210fd70b0a9595a06506863e5b3489a7a62aeb10d6e6a2736f0f2"
+}

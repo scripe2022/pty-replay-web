@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO logs (uuid, note) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "d248da964deb659606eac4bc141f07a4e7bd53c1e07003ca773bbdcd8ed13536"
+}

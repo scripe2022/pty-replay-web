@@ -1,0 +1,44 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            SELECT\n                id         AS `id!: u32`,\n                second     AS `second!: f64`,\n                note       AS `note!: String`\n            FROM marks\n            WHERE cast_id=?\n            ORDER BY second\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: u32",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | PRIMARY_KEY | UNSIGNED | AUTO_INCREMENT",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "second!: f64",
+        "type_info": {
+          "type": "Double",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "note!: String",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB",
+          "max_size": 262140
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "74ec8e068666585077b94d4cddc33adc9ae90d1efd0d383f50593c5eba7e7003"
+}

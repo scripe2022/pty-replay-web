@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            INSERT INTO marks (cast_id, second, note)\n                VALUES (?, ?, ?)\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "759c6f1161e0adb42d307be0a62df04df74d5fe08bf7cc595c156ee44787765f"
+}
