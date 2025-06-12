@@ -4,8 +4,8 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Replay: {{note}}</title>
-        <link rel="stylesheet" href="/replay/static/css/pico.min.css" />
-        <link rel="stylesheet" href="/replay/static/css/asciinema-player.css" />
+        <link rel="stylesheet" href="/static/css/pico.min.css" />
+        <link rel="stylesheet" href="/static/css/asciinema-player.css" />
         <style>
             .marks td:last-child,
             .marks th:last-child {
@@ -24,6 +24,16 @@
             }
             #note-box .primary {
                 margin-right: 0.5rem;
+            }
+            #note-edit {
+                position: absolute;
+                top: 0;
+                right: 0;
+                border: none;
+            }
+
+            #note-edit:hover {
+                background: #ddd;
             }
 
             #note-box button.primary,
@@ -85,7 +95,7 @@
                 outline-offset: 2px;
             }
         </style>
-        <script src="/replay/static/js/asciinema-player.min.js"></script>
+        <script src="/static/js/asciinema-player.min.js"></script>
     </head>
     <body style="margin: 1rem 0rem">
         <main class="container">
@@ -95,8 +105,8 @@
                         <li><strong>Player</strong></li>
                     </ul>
                     <ul>
-                        <li><a href="/replay/">Home</a></li>
-                        <li><a href="/replay/list">List</a></li>
+                        <li><a href="/">Home</a></li>
+                        <li><a href="/list">List</a></li>
                     </ul>
                 </nav>
             </div>
@@ -133,8 +143,8 @@
             <h2 class="pico">Uploaded At</h2>
             <span class="pico" style="color: #666">{{ uploaded_at | human }}</span>
             <h2 class="pico">Notes</h2>
-            <div id="note-box" class="pico">
-                <button id="note-edit" class="secondary outline" style="float: right">✏️</button>
+            <div id="note-box" class="pico" style="position: relative;">
+                <button id="note-edit" class="secondary outline">edit</button>
                 <pre id="note-view"><code>{{ note }}</code></pre>
             </div>
 
@@ -176,7 +186,7 @@
         </main>
 
         <script type="module">
-            import { PtyPlayer } from "/replay/static/js/app.js";
+            import { PtyPlayer } from "/static/js/app.js";
 
             const speedSlider = document.getElementById("speed");
             const idleSlider = document.getElementById("idle");
@@ -240,6 +250,7 @@
                             controls: true,
                         }
                     )
+
                     const box = document.getElementById(`markers-${cast.id}`);
                     if (box) renderMarkersTable(box, cast);
 
@@ -295,7 +306,7 @@
                     const sec = players.get(castId).getCurrentTime();
 
                     const resp = await requestJSON(
-                        `/replay/api/mark`,
+                        `/api/mark`,
                         "POST",
                         { cast_id: castId, second: sec, note }
                     );
@@ -328,7 +339,7 @@
                     const row = e.target.closest("tr");
                     const markId = +row.dataset.markId;
                     const castId = +row.closest("table").dataset.castId;
-                    const ok = (await requestJSON("/replay/api/mark", "DELETE", { mark_id: markId })).ok;
+                    const ok = (await requestJSON("/api/mark", "DELETE", { mark_id: markId })).ok;
                     if (!ok) return alert("Failed to delete mark");
                     players.get(castId).deleteMarker(markId);
                     row.remove();
@@ -366,7 +377,7 @@
 
                 save.onclick = async() => {
                     const body = { uuid: {{uuid | json | safe}}, note: txt.value.trim() };
-                    const res = await requestJSON("/replay/api/note", "POST", body);
+                    const res = await requestJSON("/api/note", "POST", body);
                     if (!res.ok) {
                         return alert("Failed to update note");
                     }

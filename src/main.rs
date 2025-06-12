@@ -1,6 +1,6 @@
 use anyhow::Context;
 use axum::Router;
-use axum::routing::{get, post, delete};
+use axum::routing::{delete, get, post};
 use dotenvy::dotenv;
 use tower_http::services::ServeDir;
 
@@ -39,6 +39,7 @@ async fn main() -> anyhow::Result<()> {
     dotenv().ok();
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let address = format!("0.0.0.0:{port}");
+    let dir = std::env::var("STATIC_DIR").unwrap();
 
     println!("Listening on {address}");
 
@@ -47,21 +48,24 @@ async fn main() -> anyhow::Result<()> {
 
     let state = AppState { db, minio };
 
-    let app = Router::new()
-        .nest_service(
-            "/replay/static",
-            ServeDir::new(concat!(env!("CARGO_MANIFEST_DIR"), "/static")),
-        )
-        .route("/replay/view/{id}", get(view))
-        .route("/replay/", get(index))
-        .route("/replay/list", get(list))
+    let api_router = Router::new()
+        .route("/mark", post(add_mark))
+        .route("/mark", delete(del_mark))
+        .route("/note", post(note_update))
+        .route("/upload", post(upload))
+        .route("/visible", post(visible));
 
-        .route("/replay/api/mark", delete(del_mark))
-        .route("/replay/api/mark", post(add_mark))
-        .route("/replay/api/note", post(note_update))
-        .route("/replay/api/upload", post(upload))
-        .route("/replay/api/visible", post(visible))
+    let core_router = Router::new()
+        .route("/", get(index))
+        .route("/list", get(list))
+        .route("/view/{id}", get(view))
+        .nest("/api", api_router);
+
+    let app = Router::new()
+        .nest_service("/static", ServeDir::new(dir))
+        .merge(core_router)
         .with_state(state);
+
     let listener = tokio::net::TcpListener::bind(address).await.unwrap();
 
     axum::serve(listener, app).await.context("service")
