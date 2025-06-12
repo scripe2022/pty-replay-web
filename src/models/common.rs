@@ -15,7 +15,7 @@ use std::sync::Arc;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-pub type Heartbeats = Vec<(usize, OffsetDateTime, OffsetDateTime)>;
+pub type Heartbeats = Vec<(OffsetDateTime, OffsetDateTime)>;
 
 #[derive(Serialize)]
 pub struct UploadResp {
@@ -31,8 +31,6 @@ pub struct Cast {
     pub duration: Duration,
     pub active_duration: Duration,
     pub event_count: u32,
-    pub height: u16,
-    pub width: u16,
 }
 
 #[derive(Clone)]
@@ -65,8 +63,6 @@ pub struct CastMeta {
     pub active_duration: Duration,
     pub event_count: u32,
     pub started_at: OffsetDateTime,
-    pub height: u16,
-    pub width: u16,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -106,16 +102,16 @@ impl MariaDB {
 
         qb.push_values(heartbeats.iter(), |mut b, hb| {
             b.push_bind(&uuid_str);
-            b.push_bind(hb.0 as u32);
+            b.push_bind(0);
+            b.push_bind(hb.0);
             b.push_bind(hb.1);
-            b.push_bind(hb.2);
         });
         qb.build().execute(tx.deref_mut()).await?;
 
         let bucket = std::env::var("S3_BUCKET").unwrap();
         let key = format!("{}/{}", std::env::var("S3_KEY_PREFIX").unwrap_or_default(), &uuid_str);
         let mut qb: QueryBuilder<MySql> = QueryBuilder::new(
-            r#"INSERT INTO casts (uuid, bucket, path, size_byte, duration, active_duration, event_count, started_at, height, width)"#,
+            r#"INSERT INTO casts (uuid, bucket, path, size_byte, duration, active_duration, event_count, started_at)"#,
         );
         qb.push_values(casts.iter(), |mut b, cast| {
             b.push_bind(&uuid_str);
@@ -126,8 +122,6 @@ impl MariaDB {
             b.push_bind(cast.active_duration.whole_milliseconds() as u64);
             b.push_bind(cast.event_count);
             b.push_bind(cast.started_at);
-            b.push_bind(cast.height);
-            b.push_bind(cast.width);
         });
         qb.build().execute(tx.deref_mut()).await?;
 
@@ -203,8 +197,6 @@ impl MariaDB {
             pub active_duration: u64,
             pub event_count: u32,
             pub started_at: OffsetDateTime,
-            pub height: u16,
-            pub width: u16,
         }
 
         let rows = sqlx::query_as!(
@@ -218,9 +210,7 @@ impl MariaDB {
                 duration          AS `duration!: u64`,
                 active_duration   AS `active_duration!: u64`,
                 event_count       AS `event_count!: u32`,
-                started_at        AS `started_at!: OffsetDateTime`,
-                height            AS `height!: u16`,
-                width             AS `width!: u16`
+                started_at        AS `started_at!: OffsetDateTime`
             FROM casts
             WHERE uuid=?
             ORDER BY started_at
@@ -241,8 +231,6 @@ impl MariaDB {
                 active_duration: Duration::milliseconds(row.active_duration as i64),
                 event_count: row.event_count,
                 started_at: row.started_at,
-                height: row.height,
-                width: row.width,
             })
             .collect::<Vec<CastMeta>>();
 

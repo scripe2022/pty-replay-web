@@ -1,7 +1,7 @@
+DROP table IF EXISTS `marks`;
 DROP table IF EXISTS `casts`;
 DROP table IF EXISTS `heartbeats`;
 DROP table IF EXISTS `logs`;
-DROP table IF EXISTS `marks`;
 
 CREATE TABLE logs (
   id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -23,8 +23,6 @@ CREATE TABLE casts (
   active_duration BIGINT UNSIGNED NOT NULL,
   event_count     INT UNSIGNED    NOT NULL,
   started_at      TIMESTAMP(0)    NOT NULL,
-  height          INT UNSIGNED    NOT NULL,
-  width           INT UNSIGNED    NOT NULL,
   PRIMARY KEY (id),
   KEY idx_casts_uuid (uuid),
   CONSTRAINT fk_casts_log

@@ -1,19 +1,16 @@
-use anyhow::{Context, anyhow, bail};
+use anyhow::{Context, bail};
 use base64::Engine as _;
-use flate2::read::GzDecoder;
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::LazyLock;
 use time::OffsetDateTime;
 
-use std::io::Read;
-
 #[derive(Debug, Deserialize)]
 #[serde(tag = "kind", content = "data")]
 enum Event {
-    Heartbeat(Vec<(OffsetDateTime, usize)>),
-    Cast(String, String),
+    Heartbeat(Vec<OffsetDateTime>),
+    Cast(u128, Vec<u8>),
 }
 
 impl TryFrom<&str> for Event {
@@ -24,27 +21,24 @@ impl TryFrom<&str> for Event {
 
         match kind.as_str() {
             "cast" => {
-                let (filename, content): (String, String) =
+                let (filename, content): (u128, String) =
                     serde_json::from_value(payload).context("cast payload expects [filename, content]")?;
 
                 let compressed = base64::engine::general_purpose::STANDARD.decode(&content)?;
-                let mut cast = String::new();
-                GzDecoder::new(compressed.as_slice())
-                    .read_to_string(&mut cast)
-                    .context("Failed to decompress cast payload")?;
+                let cast = zstd::stream::decode_all(&compressed[..])
+                    .context("Failed to decompress cast payload with zstd")?;
                 Ok(Event::Cast(filename, cast))
             }
             "heartbeat" => {
-                let raw: Vec<(i64, usize)> =
-                    serde_json::from_value(payload).context("heratbeat payload expects [[timestamp, unsigned],..]")?;
-                let beats = raw
-                    .into_iter()
-                    .map(|(ts, v)| {
-                        OffsetDateTime::from_unix_timestamp(ts)
-                            .map(|t| (t, v))
-                            .map_err(|e| anyhow!("bad heartbeat ts {ts}: {e}"))
-                    })
-                    .collect::<anyhow::Result<Vec<(OffsetDateTime, usize)>>>()?;
+                let content: String =
+                    serde_json::from_value(payload).context("heratbeat payload expects [timestamps]")?;
+                let compressed = base64::engine::general_purpose::STANDARD.decode(&content)?;
+                let raw = zstd::stream::decode_all(&compressed[..])
+                    .context("Failed to decompress heartbeat payload with zstd")?;
+                let beats = raw.chunks_exact(4).map(|chunk| {
+                    let ts = u32::from_le_bytes(chunk.try_into()?) as i64;
+                    OffsetDateTime::from_unix_timestamp(ts).context("Invalid heartbeat timestamp")
+                }).collect::<anyhow::Result<Vec<OffsetDateTime>>>()?;
                 Ok(Event::Heartbeat(beats))
             }
             _ => bail!("Unknown event type {kind}"),
@@ -53,15 +47,9 @@ impl TryFrom<&str> for Event {
 }
 
 #[derive(Debug)]
-pub struct HBRaw {
-    pub time: OffsetDateTime,
-    pub session: usize,
-}
-
-#[derive(Debug)]
 pub struct CastRaw {
     pub filename: String,
-    pub content: String,
+    pub content: Vec<u8>,
 }
 
 static TS_RE: LazyLock<Regex> =
@@ -71,7 +59,7 @@ pub fn strip_timestamps<S: AsRef<str>>(input: S) -> String {
     TS_RE.replace_all(input.as_ref(), "").into_owned()
 }
 
-pub fn parse_log(buf: &str) -> (Vec<HBRaw>, Vec<CastRaw>) {
+pub fn parse_log(buf: &str) -> (Vec<OffsetDateTime>, Vec<CastRaw>) {
     let buf = strip_timestamps(buf);
     let lines = buf.lines().collect::<Vec<_>>();
     let events = lines
@@ -82,13 +70,13 @@ pub fn parse_log(buf: &str) -> (Vec<HBRaw>, Vec<CastRaw>) {
     let hbs_raw = events
         .iter()
         .filter_map(|x| match x {
-            Event::Heartbeat(session) => Some(session.iter().map(|&(time, session)| HBRaw { time, session })),
+            Event::Heartbeat(times) => Some(times.iter().cloned()),
             _ => None,
         })
         .flatten()
         .collect::<Vec<_>>();
 
-    let mut casts_map = std::collections::HashMap::<String, String>::new();
+    let mut casts_map = std::collections::HashMap::<u128, Vec<u8>>::new();
     events
         .into_iter()
         .filter_map(|x| match x {
@@ -96,12 +84,12 @@ pub fn parse_log(buf: &str) -> (Vec<HBRaw>, Vec<CastRaw>) {
             _ => None,
         })
         .for_each(|(filename, content)| {
-            casts_map.entry(filename).or_default().push_str(&content);
+            casts_map.entry(filename).or_default().extend(content);
         });
 
     let casts_raw = casts_map
         .into_iter()
-        .map(|(filename, content)| CastRaw { filename, content })
+        .map(|(filename, content)| CastRaw { filename: format!("{filename}"), content })
         .collect::<Vec<_>>();
 
     (hbs_raw, casts_raw)

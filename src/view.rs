@@ -20,8 +20,6 @@ struct Cast {
     event_count: u32,
     started_at: OffsetDateTime,
     marks: Vec<MarkMeta>,
-    height: u16,
-    width: u16,
 }
 
 #[derive(Template, WebTemplate)]
@@ -66,8 +64,6 @@ pub async fn view(State(app): State<AppState>, Path(id): Path<Uuid>) -> Result<V
                 active_duration: cast.active_duration,
                 event_count: cast.event_count,
                 started_at: cast.started_at,
-                height: cast.height,
-                width: cast.width,
                 marks,
             })
         }
