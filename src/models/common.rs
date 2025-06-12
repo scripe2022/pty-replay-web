@@ -317,6 +317,15 @@ impl MinIO {
         })
     }
 
+    pub async fn get_object_stream(
+        &self,
+        bucket: &str,
+        key: &str,
+    ) -> anyhow::Result<aws_sdk_s3::primitives::ByteStream> {
+        let out = self.client.get_object().bucket(bucket).key(key).send().await?;
+        Ok(out.body)
+    }
+
     async fn upload(
         &self,
         key: &str,

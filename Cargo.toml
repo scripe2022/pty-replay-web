@@ -37,3 +37,4 @@ regex = "1.11.1"
 zstd = { version = "0.13", features = ["zstdmt"] }
 unsigned-varint = { version = "0.8", features = ["std"] }
 binrw = "0.15"
+futures-util = "0.3"

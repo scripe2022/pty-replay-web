@@ -198,7 +198,6 @@
 
             const players = new Map();
 
-            const endpoint = {{endpoint | json | safe}};
             const casts = {{casts | json | safe}};
 
             function secondToTime(seconds) {
@@ -239,7 +238,7 @@
                     const container = document.getElementById(`player-${cast.id}`);
                     container.innerHTML = "";
                     const player = new PtyPlayer(
-                        `${endpoint}/${cast.path}`,
+                        `/s3/${encodeURIComponent(cast.bucket)}/${cast.path}`,
                         document.getElementById(`player-${cast.id}`),
                         {
                             rows: cast.height,

@@ -28,6 +28,9 @@ use note::note_update;
 mod visible;
 use visible::visible;
 
+mod s3;
+use s3::s3_proxy;
+
 #[derive(Clone)]
 struct AppState {
     db: MariaDB,
@@ -64,6 +67,7 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .nest_service("/static", ServeDir::new(dir))
         .merge(core_router)
+        .route("/s3/{bucket}/{*key}", get(s3_proxy))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(address).await.unwrap();

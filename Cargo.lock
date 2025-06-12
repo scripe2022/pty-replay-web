@@ -2166,6 +2166,7 @@ dependencies = [
  "bytes",
  "dotenvy",
  "futures",
+ "futures-util",
  "regex",
  "serde",
  "serde_json",

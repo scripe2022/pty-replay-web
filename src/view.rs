@@ -26,7 +26,6 @@ struct Cast {
 #[template(path = "view.html")]
 pub struct ViewTemplate {
     uploaded_at: OffsetDateTime,
-    endpoint: String,
     note: String,
     heartbeats: Vec<(usize, OffsetDateTime, OffsetDateTime)>,
     casts: Vec<Cast>,
@@ -101,10 +100,8 @@ pub async fn view(State(app): State<AppState>, Path(id): Path<Uuid>) -> Result<V
 
     heartbeats.sort_by_key(|&(_, s, _)| s);
 
-    let endpoint = std::env::var("S3_BUCKET_ENDPOINT").unwrap_or_default();
     Ok(ViewTemplate {
         note: log.note,
-        endpoint,
         uploaded_at: log.uploaded_at,
         heartbeats,
         casts,
