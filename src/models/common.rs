@@ -97,33 +97,37 @@ impl MariaDB {
             .execute(tx.deref_mut())
             .await?;
 
-        let mut qb: QueryBuilder<MySql> =
-            QueryBuilder::new(r#"INSERT INTO heartbeats (uuid, session, started_at, ended_at)"#);
+        if !heartbeats.is_empty() {
+            let mut qb: QueryBuilder<MySql> =
+                QueryBuilder::new(r#"INSERT INTO heartbeats (uuid, session, started_at, ended_at)"#);
 
-        qb.push_values(heartbeats.iter(), |mut b, hb| {
-            b.push_bind(&uuid_str);
-            b.push_bind(0);
-            b.push_bind(hb.0);
-            b.push_bind(hb.1);
-        });
-        qb.build().execute(tx.deref_mut()).await?;
+            qb.push_values(heartbeats.iter(), |mut b, hb| {
+                b.push_bind(&uuid_str);
+                b.push_bind(0);
+                b.push_bind(hb.0);
+                b.push_bind(hb.1);
+            });
+            qb.build().execute(tx.deref_mut()).await?;
+        }
 
-        let bucket = std::env::var("S3_BUCKET").unwrap();
-        let key = format!("{}/{}", std::env::var("S3_KEY_PREFIX").unwrap_or_default(), &uuid_str);
-        let mut qb: QueryBuilder<MySql> = QueryBuilder::new(
-            r#"INSERT INTO casts (uuid, bucket, path, size_byte, duration, active_duration, event_count, started_at)"#,
-        );
-        qb.push_values(casts.iter(), |mut b, cast| {
-            b.push_bind(&uuid_str);
-            b.push_bind(&bucket);
-            b.push_bind(format!("{}/{}", key, cast.filename));
-            b.push_bind(cast.content.len() as u32);
-            b.push_bind(cast.duration.whole_milliseconds() as u64);
-            b.push_bind(cast.active_duration.whole_milliseconds() as u64);
-            b.push_bind(cast.event_count);
-            b.push_bind(cast.started_at);
-        });
-        qb.build().execute(tx.deref_mut()).await?;
+        if !casts.is_empty() {
+            let bucket = std::env::var("S3_BUCKET").unwrap();
+            let key = format!("{}/{}", std::env::var("S3_KEY_PREFIX").unwrap_or_default(), &uuid_str);
+            let mut qb: QueryBuilder<MySql> = QueryBuilder::new(
+                r#"INSERT INTO casts (uuid, bucket, path, size_byte, duration, active_duration, event_count, started_at)"#,
+            );
+            qb.push_values(casts.iter(), |mut b, cast| {
+                b.push_bind(&uuid_str);
+                b.push_bind(&bucket);
+                b.push_bind(format!("{}/{}", key, cast.filename));
+                b.push_bind(cast.content.len() as u32);
+                b.push_bind(cast.duration.whole_milliseconds() as u64);
+                b.push_bind(cast.active_duration.whole_milliseconds() as u64);
+                b.push_bind(cast.event_count);
+                b.push_bind(cast.started_at);
+            });
+            qb.build().execute(tx.deref_mut()).await?;
+        }
 
         tx.commit().await?;
         anyhow::Ok(())

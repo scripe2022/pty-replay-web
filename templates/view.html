@@ -201,6 +201,7 @@
             const casts = {{casts | json | safe}};
 
             function secondToTime(seconds) {
+                console.log(seconds);
                 return new Date(seconds * 1000).toISOString().substr(11, 8);
             }
 
@@ -233,8 +234,8 @@
                 </table>`;
             }
 
-            function initPlayers() {
-                casts.forEach((cast) => {
+            async function initPlayers() {
+                casts.forEach(async (cast) => {
                     const container = document.getElementById(`player-${cast.id}`);
                     container.innerHTML = "";
                     const player = new PtyPlayer(
@@ -254,9 +255,9 @@
                     if (box) renderMarkersTable(box, cast);
 
                     const timeSpan = box.querySelector("tbody tr:first-child span");
-                    setInterval(() => {
-                        timeSpan.textContent = secondToTime(player.getCurrentTime());
-                    }, 100);
+                    setInterval(async () => {
+                        timeSpan.textContent = secondToTime(await player.getCurrentTime());
+                    }, 25);
                     players.set(cast.id, player);
                 });
             }
@@ -302,7 +303,7 @@
                     const note = noteInput.value.trim();
                     if (!note) return;
 
-                    const sec = players.get(castId).getCurrentTime();
+                    const sec = await players.get(castId).getCurrentTime();
 
                     const resp = await requestJSON(
                         `/api/mark`,
